@@ -1,0 +1,31 @@
+# Dependencies
+node_modules
+
+# Next.js
+.next
+out
+*.tsbuildinfo
+
+# Turborepo
+.turbo
+
+# Build output
+dist
+
+# Python
+.venv
+__pycache__
+.pytest_cache
+*.pyc
+*.pyo
+
+# Sheet-scanner output (saved scans)
+output/
+
+# Env
+.env
+.env.*
+
+# OS / Editor
+.DS_Store
+*.local

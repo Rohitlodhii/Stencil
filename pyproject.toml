@@ -1,0 +1,4 @@
+# uv workspace root (virtual manifest — no Python package here).
+# Members are the actual Python projects.
+[tool.uv.workspace]
+members = ["apps/api", "apps/auth-service", "apps/gateway"]
