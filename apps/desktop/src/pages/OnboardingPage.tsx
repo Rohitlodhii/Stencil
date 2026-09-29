@@ -4,6 +4,8 @@ import { AnimatePresence, motion } from "motion/react";
 import { AuthLayout } from "@/components/AuthLayout";
 import { Button } from "@/components/ui/button";
 import { Kbd } from "@/components/ui/kbd";
+import { fetchStencilStatus } from "@/lib/exam";
+import { saveSession } from "@/lib/auth";
 import {
   Select,
   SelectContent,
@@ -17,10 +19,11 @@ const HINTS: Record<string, string> = {
   teacher: "Teachers can register with their college, then login once approved.",
 };
 
-export function OnboardingPage() {
+export function OnboardingPage({ onLogin }: { onLogin: () => void }) {
   const navigate = useNavigate();
   const [role, setRole] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
+  const [startingDemo, setStartingDemo] = useState(false);
 
   const onSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -35,6 +38,37 @@ export function OnboardingPage() {
     navigate(role === "coordinator" ? "/login/coordinator" : "/login/teacher", {
       state: { dir: 1 },
     });
+  };
+
+  const startDemo = async () => {
+    setStartingDemo(true);
+    setError(null);
+    try {
+      const status = await fetchStencilStatus();
+      if (!status.demo_mode) {
+        throw new Error("Demo mode is disabled. Start the API with STENCIL_DEMO_MODE=true.");
+      }
+      saveSession({
+        token: "local-demo-session",
+        user: {
+          role: "teacher",
+          name: "Demo Teacher",
+          college: "Stencil Local Demo",
+          teacher_id: "DEMO-TEACHER",
+          status: "demo",
+        },
+      });
+      onLogin();
+      navigate("/check-exam/900001", { replace: true });
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Demo services are unavailable. Check the local API status.",
+      );
+    } finally {
+      setStartingDemo(false);
+    }
   };
 
   // Enter anywhere continues (the select-only form has no text inputs for
@@ -107,7 +141,24 @@ export function OnboardingPage() {
               Enter
             </Kbd>
           </Button>
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={startDemo}
+            disabled={startingDemo}
+            className="ml-2 cursor-pointer"
+          >
+            {startingDemo ? "Starting demo…" : "Open DEMO MODE"}
+          </Button>
         </div>
+        <Button
+          type="button"
+          variant="ghost"
+          onClick={() => navigate("/status", { state: { dir: 1 } })}
+          className="w-fit cursor-pointer px-0 text-muted-foreground"
+        >
+          View technology status
+        </Button>
       </form>
     </AuthLayout>
   );

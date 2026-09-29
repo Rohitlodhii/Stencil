@@ -134,6 +134,16 @@ async def proxy_config(request: Request):
     return await _proxy(request, EXAM_API_URL, "/config")
 
 
+@app.api_route("/status", methods=["GET", "OPTIONS"])
+async def proxy_status(request: Request):
+    return await _proxy(request, EXAM_API_URL, "/status")
+
+
+@app.api_route("/demo-uploads/{path:path}", methods=["GET", "HEAD", "OPTIONS"])
+async def proxy_demo_upload(path: str, request: Request):
+    return await _proxy(request, EXAM_API_URL, f"/demo-uploads/{path}")
+
+
 # ---- scanner ----
 @app.api_route("/scanner/{path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"])
 async def proxy_scanner(path: str, request: Request):

@@ -4,8 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "concurrently -n scanner,backend -c green,cyan \"pnpm dev:scanner\" \"pnpm dev:backend\"",
-    "dev:scanner": "uv run uvicorn sheet_scanner.server:app --reload --port 8000",
-    "dev:backend": "uv run uvicorn app.main:app --reload --port 8001"
+    "dev:scanner": "python -m uv run uvicorn sheet_scanner.server:app --reload --port 8000",
+    "dev:backend": "python -m uv run uvicorn app.main:app --reload --port 8001"
   },
   "devDependencies": {
     "concurrently": "^9.2.1"
