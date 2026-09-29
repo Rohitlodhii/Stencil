@@ -4,6 +4,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { TitleBar } from "@/components/TitleBar";
 import { AuthHeader } from "@/components/AuthLayout";
 import { AppSidebar } from "@/components/AppSidebar";
+import { WorkspaceHeader } from "@/components/WorkspaceHeader";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { HomePage } from "@/pages/HomePage";
 import { ScannerPage } from "@/pages/ScannerPage";
@@ -21,6 +22,7 @@ import { CheckExamsPage } from "@/pages/CheckExamsPage";
 import { CheckExamDetailPage } from "@/pages/CheckExamDetailPage";
 import { CheckPaperPage } from "@/pages/CheckPaperPage";
 import { PresentationStatusPage } from "@/pages/PresentationStatusPage";
+import { DesktopDownloadPage } from "@/pages/DesktopDownloadPage";
 import { clearSession, loadSession, type Session } from "@/lib/auth";
 
 function AuthedShell({
@@ -36,13 +38,15 @@ function AuthedShell({
     <div className="flex h-screen w-full flex-col overflow-hidden bg-background text-foreground">
       <TitleBar />
       {demoMode && (
-        <div className="border-b border-amber-400 bg-amber-100 px-4 py-1.5 text-center text-xs font-semibold text-amber-950">
-          DEMO MODE · Local seeded data · Results are not production records
+        <div className="border-b border-amber-300 bg-amber-50 px-4 py-2 text-center text-xs font-semibold text-amber-950">
+          Demo mode: local seeded data and clearly labelled demo analysis. No production records are changed.
         </div>
       )}
       <div className="flex min-h-0 flex-1">
         <AppSidebar session={session} onLogout={onLogout} />
-        <div className="flex min-w-0 flex-1 flex-col overflow-y-auto">
+        <div className="flex min-w-0 flex-1 flex-col bg-background">
+          <WorkspaceHeader session={session} onLogout={onLogout} />
+          <div className="app-content min-h-0 flex-1 overflow-y-auto">
           <Routes>
               {role === "coordinator" ? (
                 <>
@@ -54,6 +58,7 @@ function AuthedShell({
                   <Route path="/students/new" element={<StudentsUploadPage session={session} />} />
                   <Route path="/students/:id" element={<StudentsDetailPage />} />
                   <Route path="/status" element={<PresentationStatusPage />} />
+                  <Route path="/download" element={<DesktopDownloadPage />} />
                   <Route path="/scanner" element={<Navigate to="/" replace />} />
                   <Route path="/teacher" element={<Navigate to="/" replace />} />
                   <Route path="*" element={<Navigate to="/" replace />} />
@@ -66,12 +71,14 @@ function AuthedShell({
                   <Route path="/check-exam/:id" element={<CheckExamDetailPage />} />
                   <Route path="/check-exam/:id/check/:studentIdx" element={<CheckPaperPage />} />
                   <Route path="/status" element={<PresentationStatusPage />} />
+                  <Route path="/download" element={<DesktopDownloadPage />} />
                   <Route path="/exam" element={<Navigate to="/" replace />} />
                   <Route path="/scanner" element={<ScannerPage />} />
                   <Route path="*" element={<Navigate to="/" replace />} />
                 </>
               )}
             </Routes>
+          </div>
         </div>
       </div>
     </div>
@@ -80,6 +87,7 @@ function AuthedShell({
 
 function PublicShell({ onLogin }: { onLogin: () => void }) {
   const location = useLocation();
+  const widePage = location.pathname === "/status" || location.pathname === "/download";
   // Slide direction is set explicitly by navigations: Continue -> +1, Back -> -1.
   const dir = (location.state as { dir?: number } | null)?.dir ?? 1;
   return (
@@ -87,7 +95,7 @@ function PublicShell({ onLogin }: { onLogin: () => void }) {
       <TitleBar />
       <div
         className={`flex min-h-0 flex-1 flex-col items-center gap-6 overflow-y-auto p-6 ${
-          location.pathname === "/status" ? "justify-start" : "justify-center"
+          widePage ? "justify-start" : "justify-center"
         }`}
       >
         <AuthHeader />
@@ -104,13 +112,14 @@ function PublicShell({ onLogin }: { onLogin: () => void }) {
             animate="center"
             exit="exit"
             transition={{ duration: 0.25, ease: "easeOut" }}
-            className={location.pathname === "/status" ? "w-full max-w-7xl" : "w-full max-w-md"}
+            className={widePage ? "w-full max-w-7xl" : "w-full max-w-md"}
           >
             <Routes location={location}>
               <Route path="/" element={<OnboardingPage onLogin={onLogin} />} />
               <Route path="/login/coordinator" element={<CoordinatorLoginPage onLogin={onLogin} />} />
               <Route path="/login/teacher" element={<TeacherAuthPage onLogin={onLogin} />} />
               <Route path="/status" element={<PresentationStatusPage />} />
+              <Route path="/download" element={<DesktopDownloadPage />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </motion.div>

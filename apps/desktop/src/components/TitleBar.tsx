@@ -1,14 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { HugeiconsIcon } from "@hugeicons/react";
-import {
-  Cancel01Icon,
-  Maximize01Icon,
-  Minimize02Icon,
-  MinimizeScreenIcon,
-  SidebarLeftIcon,
-} from "@hugeicons/core-free-icons";
-import { Moon, Sun } from "lucide-react";
+import { Maximize2, Minimize2, Minus, Moon, PanelLeft, Sun, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useTheme } from "@/lib/theme";
 import { useSidebar } from "@/components/ui/sidebar";
@@ -76,7 +68,7 @@ export function TitleBar() {
     <header
       data-tauri-drag-region
       onDoubleClick={handleToggleMaximize}
-      className="flex h-8 w-full shrink-0 items-center justify-between border-b border-border bg-background select-none"
+      className="flex h-9 w-full shrink-0 items-center justify-between border-b border-border bg-background select-none"
     >
       <div className="flex h-full shrink-0 items-stretch">
         <button
@@ -86,12 +78,7 @@ export function TitleBar() {
           title="Toggle sidebar"
           className={cn(sidebarBtn)}
         >
-          <HugeiconsIcon
-            icon={SidebarLeftIcon}
-            size={16}
-            strokeWidth={1.75}
-            color="currentColor"
-          />
+          <PanelLeft size={16} strokeWidth={1.75} />
         </button>
       </div>
       <div data-tauri-drag-region className="min-w-0 flex-1 self-stretch" />
@@ -115,12 +102,7 @@ export function TitleBar() {
           title="Minimize"
           className={cn(btn)}
         >
-          <HugeiconsIcon
-            icon={Minimize02Icon}
-            size={14}
-            strokeWidth={1.75}
-            color="currentColor"
-          />
+          <Minus size={14} strokeWidth={1.75} />
         </button>
         <button
           type="button"
@@ -129,12 +111,11 @@ export function TitleBar() {
           title={isMaximized ? "Restore" : "Maximize"}
           className={cn(btn)}
         >
-          <HugeiconsIcon
-            icon={isMaximized ? MinimizeScreenIcon : Maximize01Icon}
-            size={13}
-            strokeWidth={1.75}
-            color="currentColor"
-          />
+          {isMaximized ? (
+            <Minimize2 size={13} strokeWidth={1.75} />
+          ) : (
+            <Maximize2 size={13} strokeWidth={1.75} />
+          )}
         </button>
         <button
           type="button"
@@ -143,12 +124,7 @@ export function TitleBar() {
           title="Close"
           className={cn(btn, "hover:bg-red-500 hover:text-white")}
         >
-          <HugeiconsIcon
-            icon={Cancel01Icon}
-            size={15}
-            strokeWidth={1.75}
-            color="currentColor"
-          />
+          <X size={15} strokeWidth={1.75} />
         </button>
       </div>
     </header>
