@@ -70,7 +70,7 @@ export function TitleBar() {
     "flex h-full w-11 items-center justify-center text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none";
 
   const sidebarBtn =
-    "flex h-full w-10 items-center justify-center text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none";
+    "hidden h-full w-10 items-center justify-center text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none lg:flex";
 
   return (
     <header

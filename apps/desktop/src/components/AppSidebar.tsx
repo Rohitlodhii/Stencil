@@ -4,6 +4,7 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { StencilLogo } from "@/components/StencilLogo";
 import {
   ClipboardCheckIcon,
+  Activity01Icon,
   FileAddIcon,
   FileScanIcon,
   Home01Icon,
@@ -37,6 +38,7 @@ export function AppSidebar({
   const { state } = useSidebar();
   const collapsed = state === "collapsed";
   const role = session.user.role;
+  const demoMode = session.user.status === "demo";
   const location = useLocation();
   const [assignedExams, setAssignedExams] = useState<FinalExam[]>([]);
 
@@ -47,11 +49,13 @@ export function AppSidebar({
           { to: "/exam", label: "Create exam", icon: FileAddIcon, end: false },
           { to: "/teachers", label: "Teachers", icon: UsersIcon, end: false },
           { to: "/students", label: "Students", icon: UserIcon, end: false },
+          { to: "/status", label: "System status", icon: Activity01Icon, end: false },
         ]
       : [
           { to: "/", label: "Dashboard", icon: Home01Icon, end: true },
           { to: "/check-exam", label: "Check Exam", icon: ClipboardCheckIcon, end: false },
-          { to: "/scanner", label: "Scanner", icon: FileScanIcon, end: false },
+          { to: "/status", label: "System status", icon: Activity01Icon, end: false },
+          ...(demoMode ? [] : [{ to: "/scanner", label: "Scanner", icon: FileScanIcon, end: false }]),
         ];
 
   // Teacher: load assigned exams so the "Check Exam" sidebar section can list them.
@@ -71,7 +75,7 @@ export function AppSidebar({
   }, [role, session.user.name, location.pathname]);
 
   return (
-    <Sidebar collapsible="icon">
+    <Sidebar collapsible="icon" className="hidden lg:flex">
       <SidebarHeader>
         <div
           className={

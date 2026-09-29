@@ -560,7 +560,7 @@ export function CheckPaperPage() {
           <Button
             type="button"
             onClick={() => cameraInputRef.current?.click()}
-            className="h-12 w-full cursor-pointer text-sm sm:hidden"
+            className="h-12 w-full touch-manipulation cursor-pointer text-sm sm:hidden"
           >
             <Camera className="size-5" />
             Capture/Upload Answer Sheet
@@ -784,7 +784,7 @@ export function CheckPaperPage() {
                   value={awardedMarks}
                   readOnly
                   inputMode="decimal"
-                  className="h-11 rounded-md border bg-background px-3 text-sm sm:h-9"
+                  className="h-11 rounded-md border bg-background px-3 text-base sm:h-9 sm:text-sm"
                   placeholder={`0 to ${exam.total_marks}`}
                 />
                 <label className="text-sm font-medium" htmlFor="feedback">
@@ -859,7 +859,7 @@ export function CheckPaperPage() {
                               type="button"
                               aria-label={`Decrease marks for question ${item.q_no}`}
                               onClick={() => nudgeQuestionMarks(i, -0.5)}
-                              className="flex h-11 w-11 cursor-pointer items-center justify-center rounded-md border bg-background hover:bg-accent sm:h-8 sm:w-8"
+                              className="flex h-11 w-11 touch-manipulation cursor-pointer items-center justify-center rounded-md border bg-background hover:bg-accent sm:h-8 sm:w-8"
                             >
                               <Minus className="size-4" />
                             </button>
@@ -871,13 +871,13 @@ export function CheckPaperPage() {
                               step="0.5"
                               value={finalMarks}
                               onChange={(event) => updateQuestionMarks(i, event.target.value)}
-                              className={`h-11 min-w-0 rounded-md border bg-background px-2 text-center tabular-nums sm:h-8 ${invalidMarks ? "border-destructive" : ""}`}
+                              className={`h-11 min-w-0 rounded-md border bg-background px-2 text-center text-base tabular-nums sm:h-8 sm:text-sm ${invalidMarks ? "border-destructive" : ""}`}
                             />
                             <button
                               type="button"
                               aria-label={`Increase marks for question ${item.q_no}`}
                               onClick={() => nudgeQuestionMarks(i, 0.5)}
-                              className="flex h-11 w-11 cursor-pointer items-center justify-center rounded-md border bg-background hover:bg-accent sm:h-8 sm:w-8"
+                              className="flex h-11 w-11 touch-manipulation cursor-pointer items-center justify-center rounded-md border bg-background hover:bg-accent sm:h-8 sm:w-8"
                             >
                               <Plus className="size-4" />
                             </button>
@@ -894,7 +894,7 @@ export function CheckPaperPage() {
                               value={item.override_reason ?? ""}
                               onChange={(event) => updateOverrideReason(i, event.target.value)}
                               placeholder="Override reason (optional)"
-                              className="mt-2 h-11 w-full rounded-md border bg-background px-2 text-xs sm:h-8"
+                              className="mt-2 h-11 w-full rounded-md border bg-background px-2 text-base sm:h-8 sm:text-xs"
                             />
                           )}
                         </div>

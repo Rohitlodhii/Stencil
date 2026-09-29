@@ -94,7 +94,7 @@ function PublicShell({ onLogin }: { onLogin: () => void }) {
             className="w-full max-w-md"
           >
             <Routes location={location}>
-              <Route path="/" element={<OnboardingPage />} />
+              <Route path="/" element={<OnboardingPage onLogin={onLogin} />} />
               <Route path="/login/coordinator" element={<CoordinatorLoginPage onLogin={onLogin} />} />
               <Route path="/login/teacher" element={<TeacherAuthPage onLogin={onLogin} />} />
               <Route path="*" element={<Navigate to="/" replace />} />
