@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { FilePlus2, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { EvaluationDashboard } from "@/components/EvaluationDashboard";
 import type { Session } from "@/lib/auth";
 import {
   fetchFinalExams,
@@ -39,7 +40,7 @@ export function CoordinatorDashboardPage({ session }: { session: Session }) {
   }, [load]);
 
   return (
-    <main className="mx-auto flex min-h-full w-full max-w-3xl flex-col gap-4 p-6">
+    <main className="mx-auto flex min-h-full w-full max-w-7xl flex-col gap-4 p-6">
       <h1 className="text-2xl font-bold tracking-tight">Coordinator dashboard</h1>
       <p className="text-sm text-muted-foreground">
         Welcome {session.user.name} — {session.user.college}.
@@ -115,6 +116,8 @@ export function CoordinatorDashboardPage({ session }: { session: Session }) {
           </div>
         )}
       </section>
+
+      <EvaluationDashboard />
 
       <section className="flex flex-col gap-3">
         <div>
