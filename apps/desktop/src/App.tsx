@@ -20,6 +20,7 @@ import { TeacherDashboardPage } from "@/pages/TeacherDashboardPage";
 import { CheckExamsPage } from "@/pages/CheckExamsPage";
 import { CheckExamDetailPage } from "@/pages/CheckExamDetailPage";
 import { CheckPaperPage } from "@/pages/CheckPaperPage";
+import { PresentationStatusPage } from "@/pages/PresentationStatusPage";
 import { clearSession, loadSession, type Session } from "@/lib/auth";
 
 function AuthedShell({
@@ -30,9 +31,15 @@ function AuthedShell({
   onLogout: () => void;
 }) {
   const role = session.user.role;
+  const demoMode = session.user.status === "demo";
   return (
     <div className="flex h-screen w-full flex-col overflow-hidden bg-background text-foreground">
       <TitleBar />
+      {demoMode && (
+        <div className="border-b border-amber-400 bg-amber-100 px-4 py-1.5 text-center text-xs font-semibold text-amber-950">
+          DEMO MODE · Local seeded data · Results are not production records
+        </div>
+      )}
       <div className="flex min-h-0 flex-1">
         <AppSidebar session={session} onLogout={onLogout} />
         <div className="flex min-w-0 flex-1 flex-col overflow-y-auto">
@@ -46,6 +53,7 @@ function AuthedShell({
                   <Route path="/students" element={<StudentsPage />} />
                   <Route path="/students/new" element={<StudentsUploadPage session={session} />} />
                   <Route path="/students/:id" element={<StudentsDetailPage />} />
+                  <Route path="/status" element={<PresentationStatusPage />} />
                   <Route path="/scanner" element={<Navigate to="/" replace />} />
                   <Route path="/teacher" element={<Navigate to="/" replace />} />
                   <Route path="*" element={<Navigate to="/" replace />} />
@@ -57,6 +65,7 @@ function AuthedShell({
                   <Route path="/check-exam" element={<CheckExamsPage session={session} />} />
                   <Route path="/check-exam/:id" element={<CheckExamDetailPage />} />
                   <Route path="/check-exam/:id/check/:studentIdx" element={<CheckPaperPage />} />
+                  <Route path="/status" element={<PresentationStatusPage />} />
                   <Route path="/exam" element={<Navigate to="/" replace />} />
                   <Route path="/scanner" element={<ScannerPage />} />
                   <Route path="*" element={<Navigate to="/" replace />} />
@@ -76,7 +85,11 @@ function PublicShell({ onLogin }: { onLogin: () => void }) {
   return (
     <div className="flex h-screen w-full flex-col overflow-hidden bg-background text-foreground">
       <TitleBar />
-      <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-6 overflow-y-auto p-6">
+      <div
+        className={`flex min-h-0 flex-1 flex-col items-center gap-6 overflow-y-auto p-6 ${
+          location.pathname === "/status" ? "justify-start" : "justify-center"
+        }`}
+      >
         <AuthHeader />
         <AnimatePresence mode="wait" custom={dir}>
           <motion.div
@@ -91,12 +104,13 @@ function PublicShell({ onLogin }: { onLogin: () => void }) {
             animate="center"
             exit="exit"
             transition={{ duration: 0.25, ease: "easeOut" }}
-            className="w-full max-w-md"
+            className={location.pathname === "/status" ? "w-full max-w-7xl" : "w-full max-w-md"}
           >
             <Routes location={location}>
               <Route path="/" element={<OnboardingPage onLogin={onLogin} />} />
               <Route path="/login/coordinator" element={<CoordinatorLoginPage onLogin={onLogin} />} />
               <Route path="/login/teacher" element={<TeacherAuthPage onLogin={onLogin} />} />
+              <Route path="/status" element={<PresentationStatusPage />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </motion.div>
