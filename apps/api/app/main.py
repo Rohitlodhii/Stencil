@@ -49,6 +49,10 @@ STENCIL_DEMO_MODE = os.getenv("STENCIL_DEMO_MODE", "").strip().lower() in {"1", 
 DEMO_PUBLIC_BASE_URL = os.getenv("STENCIL_DEMO_PUBLIC_BASE_URL", "").rstrip("/")
 SCANNER_SERVICE_URL = os.getenv("SCANNER_URL", "http://127.0.0.1:8000").rstrip("/")
 
+# CORS origins: comma-separated list, default to localhost:3000 for local dev
+CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000")
+ALLOWED_ORIGINS = [origin.strip() for origin in CORS_ORIGINS.split(",")]
+
 S3_BUCKET = os.getenv("S3_BUCKET", "mponline-images-398218088339")
 AWS_REGION = os.getenv("AWS_REGION", os.getenv("AWS_DEFAULT_REGION", "ap-south-1"))
 
