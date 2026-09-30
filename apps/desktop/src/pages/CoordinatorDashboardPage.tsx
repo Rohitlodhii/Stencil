@@ -3,6 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { FilePlus2, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { EvaluationDashboard } from "@/components/EvaluationDashboard";
+import { PageHeader } from "@/components/PageHeader";
+import { StatePanel } from "@/components/StatePanel";
 import type { Session } from "@/lib/auth";
 import {
   fetchFinalExams,
@@ -40,15 +42,16 @@ export function CoordinatorDashboardPage({ session }: { session: Session }) {
   }, [load]);
 
   return (
-    <main className="mx-auto flex min-h-full w-full max-w-7xl flex-col gap-4 p-6">
-      <h1 className="text-2xl font-bold tracking-tight">Coordinator dashboard</h1>
-      <p className="text-sm text-muted-foreground">
-        Welcome {session.user.name} — {session.user.college}.
-      </p>
+    <main className="app-page">
+      <PageHeader
+        title="Coordinator dashboard"
+        description={`${session.user.name} · ${session.user.college}`}
+        actions={<Button type="button" onClick={() => navigate("/exam")}><FilePlus2 /> New examination</Button>}
+      />
 
       <section className="flex flex-col gap-3">
         <div className="flex items-center gap-2">
-          <h2 className="font-title text-xl font-bold tracking-tight">
+          <h2 className="section-heading">
             Created exams
           </h2>
           <div className="ml-auto flex items-center gap-2">
@@ -61,30 +64,18 @@ export function CoordinatorDashboardPage({ session }: { session: Session }) {
               <RefreshCw className="size-3.5" />
               Refresh
             </Button>
-            <Button
-              type="button"
-              onClick={() => navigate("/exam")}
-              className="h-7 cursor-pointer p-1 pr-3 text-xs"
-            >
-              <span className="flex h-full aspect-square items-center justify-center rounded-sm bg-secondary p-1 text-secondary-foreground">
-                <FilePlus2 className="size-3.5" />
-              </span>
-              New exam
-            </Button>
           </div>
         </div>
 
-        {loading && <p className="text-sm text-muted-foreground">Loading…</p>}
-        {error && <p className="text-sm text-destructive">{error}</p>}
+        {loading && <StatePanel state="loading" title="Loading examinations" />}
+        {error && <StatePanel state="error" title="Examinations unavailable" description={error} action={<Button variant="outline" onClick={load}>Try again</Button>} />}
 
         {!loading && !error && finalExams.length === 0 && (
-          <p className="text-sm text-muted-foreground">
-            No created exams yet — build one from the exam page.
-          </p>
+          <StatePanel state="empty" title="No examinations created" description="Create an examination to assign questions, students, and an examiner." />
         )}
 
         {finalExams.length > 0 && (
-          <div className="overflow-x-auto rounded-md border">
+          <div className="table-panel">
             <table className="w-full border-collapse text-sm">
               <thead>
                 <tr className="bg-muted text-left">
@@ -121,7 +112,7 @@ export function CoordinatorDashboardPage({ session }: { session: Session }) {
 
       <section className="flex flex-col gap-3">
         <div>
-          <h2 className="font-title text-xl font-bold tracking-tight">
+          <h2 className="section-heading">
             Saved exams
           </h2>
           <p className="text-sm text-muted-foreground">
@@ -130,11 +121,11 @@ export function CoordinatorDashboardPage({ session }: { session: Session }) {
         </div>
 
         {!loading && !error && exams.length === 0 && (
-          <p className="text-sm text-muted-foreground">No saved exams yet.</p>
+          <StatePanel state="empty" title="No saved analyses" description="Syllabus analyses saved from the examination builder will appear here." />
         )}
 
         {exams.length > 0 && (
-          <div className="overflow-x-auto rounded-md border">
+          <div className="table-panel">
             <table className="w-full border-collapse text-sm">
               <thead>
                 <tr className="bg-muted text-left">

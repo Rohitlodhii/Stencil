@@ -457,7 +457,7 @@ export function CheckPaperPage() {
 
   if (loading) {
     return (
-      <main className="mx-auto flex min-h-full w-full max-w-5xl flex-col gap-4 p-3 sm:gap-6 sm:p-6">
+      <main className="app-page max-w-6xl">
         <p className="text-sm text-muted-foreground">Loading student…</p>
       </main>
     );
@@ -465,7 +465,7 @@ export function CheckPaperPage() {
 
   if (error || !exam) {
     return (
-      <main className="mx-auto flex min-h-full w-full max-w-5xl flex-col gap-4 p-3 sm:gap-6 sm:p-6">
+      <main className="app-page max-w-6xl">
         <button
           type="button"
           onClick={() => navigate(`/check-exam/${examId}`)}
@@ -480,7 +480,7 @@ export function CheckPaperPage() {
   }
 
   return (
-    <main className="mx-auto flex min-h-full w-full max-w-5xl flex-col gap-4 overflow-x-hidden p-3 sm:gap-6 sm:p-6">
+    <main className="app-page max-w-6xl overflow-x-hidden">
       <button
         type="button"
         onClick={() => navigate(`/check-exam/${exam.id}`)}
@@ -492,7 +492,7 @@ export function CheckPaperPage() {
 
       <div className="flex flex-wrap items-center gap-2">
         <Badge variant="secondary" className="sm:hidden">Mobile examiner view</Badge>
-        <h1 className="w-full font-title text-xl font-bold leading-tight tracking-normal sm:w-auto sm:text-3xl sm:leading-none">
+        <h1 className="w-full font-title text-xl font-semibold leading-tight sm:w-auto sm:text-[1.75rem]">
           Check paper — {studentName}
         </h1>
         {hasSavedMark ? (
@@ -529,7 +529,7 @@ export function CheckPaperPage() {
         </div>
       )}
 
-      <Card className="border-0 bg-sidebar shadow-none">
+      <Card>
         <CardHeader className="px-3 sm:px-6">
           <CardTitle className="font-title flex items-center gap-2 text-xl font-bold tracking-tight">
             <FileUp className="size-5" />

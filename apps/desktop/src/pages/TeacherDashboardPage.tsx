@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { EvaluationDashboard } from "@/components/EvaluationDashboard";
+import { PageHeader } from "@/components/PageHeader";
+import { StatePanel } from "@/components/StatePanel";
 import type { Session } from "@/lib/auth";
 import { fetchFinalExams, type FinalExam } from "@/lib/exam";
 
@@ -28,15 +30,12 @@ export function TeacherDashboardPage({ session }: { session: Session }) {
   }, [load]);
 
   return (
-    <main className="mx-auto flex min-h-full w-full max-w-7xl flex-col gap-4 p-6">
-      <h1 className="text-2xl font-bold tracking-tight">Teacher dashboard</h1>
-      <p className="text-sm text-muted-foreground">
-        Welcome {session.user.name} ({session.user.teacher_id}) — {session.user.college}.
-      </p>
+    <main className="app-page">
+      <PageHeader title="Examiner dashboard" description={`${session.user.name} · ${session.user.teacher_id ?? "Examiner"} · ${session.user.college}`} />
 
       <section className="flex flex-col gap-3">
         <div className="flex items-center gap-2">
-          <h2 className="font-title text-xl font-bold tracking-tight">
+          <h2 className="section-heading">
             My exams
           </h2>
           <Button
@@ -50,17 +49,15 @@ export function TeacherDashboardPage({ session }: { session: Session }) {
           </Button>
         </div>
 
-        {loading && <p className="text-sm text-muted-foreground">Loading…</p>}
-        {error && <p className="text-sm text-destructive">{error}</p>}
+        {loading && <StatePanel state="loading" title="Loading assigned examinations" />}
+        {error && <StatePanel state="error" title="Assignments unavailable" description={error} action={<Button variant="outline" onClick={load}>Try again</Button>} />}
 
         {!loading && !error && exams.length === 0 && (
-          <p className="text-sm text-muted-foreground">
-            No exams assigned to you yet.
-          </p>
+          <StatePanel state="empty" title="No assigned examinations" description="New assignments will appear here when a coordinator allocates them to you." />
         )}
 
         {exams.length > 0 && (
-          <div className="overflow-x-auto rounded-md border">
+          <div className="table-panel">
             <table className="w-full border-collapse text-sm">
               <thead>
                 <tr className="bg-muted text-left">

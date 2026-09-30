@@ -1,13 +1,13 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { AnimatePresence, motion } from "motion/react";
+import { ArrowLeft } from "lucide-react";
 import { AuthLayout } from "@/components/AuthLayout";
 import { Button } from "@/components/ui/button";
-import { Kbd } from "@/components/ui/kbd";
 import { coordinatorLogin, fetchSeededCoordinators } from "@/lib/auth";
 
 const inputCls =
-  "h-9 rounded-md border border-input bg-transparent px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring";
+  "w-full";
 
 export function CoordinatorLoginPage({ onLogin }: { onLogin: () => void }) {
   const navigate = useNavigate();
@@ -69,6 +69,10 @@ export function CoordinatorLoginPage({ onLogin }: { onLogin: () => void }) {
         <label className="flex flex-col gap-1.5">
           <span className="text-sm font-medium">Coordinator ID</span>
           <input
+            name="coordinator_id"
+            autoComplete="username"
+            required
+            aria-invalid={Boolean(error)}
             value={coordinatorId}
             onChange={(e) => setCoordinatorId(e.target.value)}
             placeholder="e.g. coord_rgpv"
@@ -87,6 +91,10 @@ export function CoordinatorLoginPage({ onLogin }: { onLogin: () => void }) {
           <span className="text-sm font-medium">Password</span>
           <input
             type="password"
+            name="password"
+            autoComplete="current-password"
+            required
+            aria-invalid={Boolean(error)}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             placeholder="••••••••"
@@ -101,7 +109,7 @@ export function CoordinatorLoginPage({ onLogin }: { onLogin: () => void }) {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.2 }}
-              className="text-sm text-destructive"
+              className="notice-error"
             >
               {error}
             </motion.p>
@@ -114,19 +122,12 @@ export function CoordinatorLoginPage({ onLogin }: { onLogin: () => void }) {
             onClick={() => navigate("/", { state: { dir: -1 } })}
             className="cursor-pointer"
           >
-            ← Back
-            <Kbd>Bck</Kbd>
+            <ArrowLeft /> Back
           </Button>
           <Button type="submit" disabled={loading} className="cursor-pointer">
             {loading ? "Logging in…" : "Login"}
-            <Kbd className="h-4 border-primary-foreground/30 bg-primary-foreground/10 px-1 text-[9px] text-primary-foreground">
-              Enter
-            </Kbd>
           </Button>
         </div>
-        <p className="text-xs text-muted-foreground">
-          Demo IDs: coord_rgpv / coord_davv / coord_manit (password: coord123).
-        </p>
       </form>
     </AuthLayout>
   );

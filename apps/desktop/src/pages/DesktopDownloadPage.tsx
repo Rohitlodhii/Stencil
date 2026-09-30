@@ -12,13 +12,13 @@ export function DesktopDownloadPage() {
   const configuredBuilds = DESKTOP_DOWNLOADS.filter((item) => item.url).length;
 
   return (
-    <main className="mx-auto flex min-h-full w-full max-w-5xl flex-col gap-8 p-4 sm:p-6 lg:p-8">
+    <main className="app-page max-w-5xl">
       <header className="border-b pb-6">
         <div className="mb-3 flex size-11 items-center justify-center rounded-md bg-primary text-primary-foreground">
           <MonitorDown className="size-5" />
         </div>
         <p className="text-xs font-semibold uppercase text-muted-foreground">Desktop application</p>
-        <h1 className="mt-1 font-title text-3xl font-semibold tracking-normal">Get Stencil for desktop</h1>
+        <h1 className="mt-1 font-title text-2xl font-semibold sm:text-[1.75rem]">Get Stencil for desktop</h1>
         <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
           Use the same examination workspace in a dedicated desktop window. Scanner access remains available from the examiner navigation when its local service is running.
         </p>
@@ -65,9 +65,7 @@ export function DesktopDownloadPage() {
         </div>
       </section>
 
-      <p className="rounded-md border bg-muted/40 p-4 text-sm leading-6 text-muted-foreground">
-        Release maintainers can configure <code>VITE_DESKTOP_WINDOWS_URL</code>, <code>VITE_DESKTOP_MACOS_URL</code>, and <code>VITE_DESKTOP_LINUX_URL</code>. No installer is advertised until its URL exists.
-      </p>
+      {configuredBuilds === 0 && <p className="rounded-md border bg-muted/40 p-4 text-sm leading-6 text-muted-foreground">Desktop installers have not been published yet. The web application remains fully available in your browser.</p>}
     </main>
   );
 }

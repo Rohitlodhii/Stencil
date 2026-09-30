@@ -205,12 +205,12 @@ export function PresentationStatusPage() {
   };
 
   return (
-    <main className="mx-auto flex min-h-full w-full max-w-7xl flex-col gap-6 p-3 sm:p-6 print:max-w-none print:p-0">
+    <main className="app-page print:max-w-none print:p-0">
       <header className="flex flex-col gap-3 border-b pb-5 sm:flex-row sm:items-start">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <Activity className="size-6 text-primary" />
-            <h1 className="font-title text-2xl font-bold tracking-normal sm:text-3xl">
+            <h1 className="font-title text-2xl font-semibold sm:text-[1.75rem]">
               Technology status and demo evidence
             </h1>
           </div>

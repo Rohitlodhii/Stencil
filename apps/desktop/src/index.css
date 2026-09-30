@@ -198,12 +198,12 @@
   --shadow-xl: var(--shadow-xl);
   --shadow-2xl: var(--shadow-2xl);
 
-  --tracking-tighter: calc(var(--tracking-normal) - 0.05em);
-  --tracking-tight: calc(var(--tracking-normal) - 0.025em);
+  --tracking-tighter: 0em;
+  --tracking-tight: 0em;
   --tracking-normal: var(--tracking-normal);
-  --tracking-wide: calc(var(--tracking-normal) + 0.025em);
-  --tracking-wider: calc(var(--tracking-normal) + 0.05em);
-  --tracking-widest: calc(var(--tracking-normal) + 0.1em);
+  --tracking-wide: 0em;
+  --tracking-wider: 0em;
+  --tracking-widest: 0em;
 }
 
 @layer base {
@@ -217,6 +217,84 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
+  }
+  button,
+  a,
+  input,
+  select,
+  textarea {
+    @apply focus-visible:outline-none;
+  }
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+  textarea {
+    @apply rounded-md border border-input bg-card px-3 text-sm shadow-xs transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/20;
+  }
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]) {
+    @apply min-h-10;
+  }
+  textarea {
+    @apply py-2;
+  }
+  ::selection {
+    @apply bg-primary/20;
+  }
+}
+
+@layer components {
+  .app-page {
+    @apply mx-auto flex min-h-full w-full max-w-7xl flex-col gap-6 p-4 sm:p-6 lg:p-8;
+  }
+  .app-section {
+    @apply flex flex-col gap-3;
+  }
+  .section-heading {
+    @apply font-title text-base font-semibold text-foreground;
+  }
+  .section-description {
+    @apply text-sm leading-relaxed text-muted-foreground;
+  }
+  .table-panel {
+    @apply overflow-x-auto rounded-lg border bg-card shadow-xs;
+  }
+  .table-panel table {
+    @apply w-full border-collapse text-sm;
+  }
+  .table-panel thead {
+    @apply bg-muted/80 text-left;
+  }
+  .table-panel th {
+    @apply whitespace-nowrap px-4 py-3 text-xs font-semibold text-muted-foreground;
+  }
+  .table-panel td {
+    @apply px-4 py-3;
+  }
+  .table-panel tbody tr {
+    @apply border-t transition-colors hover:bg-accent/45;
+  }
+  .segmented-control {
+    @apply inline-flex max-w-full items-center gap-1 overflow-x-auto rounded-lg border bg-card p-1 shadow-xs;
+  }
+  .segmented-control button {
+    @apply min-h-8 rounded-md px-3 text-xs font-semibold capitalize text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/30;
+  }
+  .segmented-control button[aria-pressed="true"] {
+    @apply bg-primary text-primary-foreground;
+  }
+  .notice-error {
+    @apply flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2.5 text-sm text-destructive;
+  }
+  .notice-success {
+    @apply flex items-start gap-2 rounded-md border border-emerald-600/30 bg-emerald-50 px-3 py-2.5 text-sm text-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300;
+  }
+}
+
+@media (max-width: 639px) {
+  .app-content > main {
+    padding: 1rem !important;
+  }
+  .table-panel th,
+  .table-panel td {
+    @apply px-3 py-2.5;
   }
 }
 

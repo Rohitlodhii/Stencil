@@ -6,7 +6,6 @@ import { AuthHeader } from "@/components/AuthLayout";
 import { AppSidebar } from "@/components/AppSidebar";
 import { WorkspaceHeader } from "@/components/WorkspaceHeader";
 import { SidebarProvider } from "@/components/ui/sidebar";
-import { HomePage } from "@/pages/HomePage";
 import { ScannerPage } from "@/pages/ScannerPage";
 import { ExamPage } from "@/pages/ExamPage";
 import { OnboardingPage } from "@/pages/OnboardingPage";
@@ -51,7 +50,7 @@ function AuthedShell({
               {role === "coordinator" ? (
                 <>
                   <Route path="/" element={<CoordinatorDashboardPage session={session} />} />
-                  <Route path="/home" element={<HomePage />} />
+                  <Route path="/home" element={<Navigate to="/" replace />} />
                   <Route path="/exam" element={<ExamPage session={session} />} />
                   <Route path="/teachers" element={<TeachersPage session={session} />} />
                   <Route path="/students" element={<StudentsPage />} />
@@ -94,24 +93,24 @@ function PublicShell({ onLogin }: { onLogin: () => void }) {
     <div className="flex h-screen w-full flex-col overflow-hidden bg-background text-foreground">
       <TitleBar />
       <div
-        className={`flex min-h-0 flex-1 flex-col items-center gap-6 overflow-y-auto p-6 ${
+        className={`flex min-h-0 flex-1 flex-col items-center gap-6 overflow-y-auto bg-muted/30 px-4 py-8 sm:px-6 ${
           widePage ? "justify-start" : "justify-center"
         }`}
       >
-        <AuthHeader />
+        {!widePage && <AuthHeader />}
         <AnimatePresence mode="wait" custom={dir}>
           <motion.div
             key={location.pathname}
             custom={dir}
             variants={{
-              enter: (d: number) => ({ opacity: 0, x: d >= 0 ? 60 : -60 }),
-              center: { opacity: 1, x: 0 },
-              exit: (d: number) => ({ opacity: 0, x: d >= 0 ? -60 : 60 }),
+              enter: (d: number) => ({ opacity: 0, y: d >= 0 ? 10 : -10 }),
+              center: { opacity: 1, y: 0 },
+              exit: (d: number) => ({ opacity: 0, y: d >= 0 ? -10 : 10 }),
             }}
             initial="enter"
             animate="center"
             exit="exit"
-            transition={{ duration: 0.25, ease: "easeOut" }}
+            transition={{ duration: 0.18, ease: "easeOut" }}
             className={widePage ? "w-full max-w-7xl" : "w-full max-w-md"}
           >
             <Routes location={location}>

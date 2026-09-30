@@ -3,6 +3,8 @@ import { Camera as CameraIcon, RefreshCw, ScanLine } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { FieldSelect } from "@/components/FieldSelect";
+import { PageHeader } from "@/components/PageHeader";
+import { StatePanel } from "@/components/StatePanel";
 import {
   Card,
   CardContent,
@@ -130,11 +132,13 @@ export function ScannerView() {
         : "bg-gray-400";
 
   return (
-    <main className="mx-auto flex min-h-full w-full max-w-4xl flex-col gap-6 p-6">
-      <div className="flex items-center gap-3">
-        <ScanLine className="size-7" />
-        <h1 className="text-3xl font-bold tracking-tight">Sheet Scanner</h1>
-      </div>
+    <main className="app-page max-w-6xl">
+      <PageHeader
+        title="Sheet scanner"
+        description="Capture aligned answer-sheet pages from a connected camera before evaluation."
+        icon={ScanLine}
+        actions={<Button variant="outline" onClick={() => { loadCameras(); loadScans(); }}><RefreshCw /> Refresh devices</Button>}
+      />
 
       <Card>
         <CardHeader>
@@ -165,15 +169,6 @@ export function ScannerView() {
               ariaLabel="Camera"
             />
           </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={loadCameras}
-            disabled={switching}
-          >
-            <RefreshCw className="size-4" />
-            Refresh
-          </Button>
           {status && (
             <Badge variant={badgeVariant}>
               {status.stable
@@ -191,28 +186,28 @@ export function ScannerView() {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardContent className="pt-6">
+      <Card className="overflow-hidden">
+        <CardContent>
           {/* Live MJPEG preview served by the Python scanner. */}
-          <img
-            key={currentCamera ?? "preview"}
-            src={streamUrl()}
-            alt="Live scanner preview"
-            className="w-full rounded-md border"
-          />
-          <div className="mt-4">
-            <Button onClick={onCapture} disabled={capturing}>
+          {status ? <img
+              key={currentCamera ?? "preview"}
+              src={streamUrl()}
+              alt="Live scanner preview"
+              className="aspect-[4/3] w-full rounded-md border bg-muted object-contain"
+            /> : <StatePanel state="error" title="Scanner service is offline" description={`Start the scanner service and confirm it is reachable at ${SCANNER_URL}. The browser does not activate a camera on this page by itself.`} />}
+          <div className="mt-4 flex justify-end">
+            <Button size="lg" onClick={onCapture} disabled={capturing || !status} className="w-full sm:w-auto">
               <CameraIcon className="size-4" />
-              {capturing ? "Capturing…" : "Capture"}
+              {capturing ? "Capturing…" : "Capture answer sheet"}
             </Button>
           </div>
         </CardContent>
       </Card>
 
-      <section>
-        <h2 className="mb-3 text-xl font-semibold">Scans</h2>
+      <section className="app-section">
+        <div><h2 className="section-heading">Recent captures</h2><p className="section-description">Captured pages remain available for review in this scanner session.</p></div>
         {scans.length === 0 ? (
-          <p className="text-muted-foreground">No scans yet.</p>
+          <StatePanel state="empty" title="No captured pages" description="Captured answer-sheet pages will appear here." />
         ) : (
           <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
             {scans.map((scan) => (

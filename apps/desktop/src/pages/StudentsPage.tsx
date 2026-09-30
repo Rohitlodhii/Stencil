@@ -2,12 +2,8 @@ import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { GraduationCap, Plus, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { PageHeader } from "@/components/PageHeader";
+import { StatePanel } from "@/components/StatePanel";
 import {
   fetchStudentDatasets,
   loadLocalDatasets,
@@ -47,50 +43,35 @@ export function StudentsPage() {
   }, [load]);
 
   return (
-    <main className="mx-auto flex min-h-full w-full max-w-3xl flex-col gap-6 p-6">
-      <div className="flex items-center gap-2">
-        <GraduationCap className="size-7" />
-        <h1 className="font-title text-3xl font-bold leading-none tracking-tight">
-          Students
-        </h1>
-      </div>
-
-      <div className="flex items-center gap-2">
-        <Button
+    <main className="app-page max-w-6xl">
+      <PageHeader
+        title="Student records"
+        description="Manage examination rosters, identifiers, and marks datasets."
+        icon={GraduationCap}
+        actions={<><Button
           type="button"
           onClick={() => navigate("/students/new")}
           className="cursor-pointer"
         >
-          <span className="flex aspect-square items-center justify-center rounded-sm bg-secondary p-1 text-secondary-foreground">
-            <Plus className="size-4" />
-          </span>
+          <Plus />
           Add student data
         </Button>
         <Button
           type="button"
           variant="secondary"
           onClick={load}
-          className="ml-auto cursor-pointer"
+          className="cursor-pointer"
         >
           <RefreshCw className="size-4" />
           Refresh
-        </Button>
-      </div>
+        </Button></>}
+      />
 
-      {loading && <p className="text-sm text-muted-foreground">Loading…</p>}
-      {error && <p className="text-sm text-destructive">{error}</p>}
+      {loading && <StatePanel state="loading" title="Loading student datasets" />}
+      {error && <div className="notice-error">{error}</div>}
 
       {!loading && datasets.length === 0 && !error && (
-        <Card className="border-0 bg-sidebar shadow-none">
-          <CardHeader>
-            <CardTitle className="font-title text-xl font-bold tracking-tight">
-              No student data yet
-            </CardTitle>
-            <CardDescription>
-              Upload a CSV with student marks and attendance to get started.
-            </CardDescription>
-          </CardHeader>
-        </Card>
+        <StatePanel state="empty" title="No student data yet" description="Upload a CSV with student marks and attendance to get started." />
       )}
 
       {datasets.length > 0 && (
@@ -104,7 +85,7 @@ export function StudentsPage() {
               in the database with the CSV on S3.
             </p>
           </div>
-          <div className="overflow-x-auto rounded-md border">
+          <div className="table-panel">
               <table className="w-full border-collapse text-sm">
                 <thead>
                   <tr className="bg-muted text-left">

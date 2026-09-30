@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { AnimatePresence, motion } from "motion/react";
+import { Activity, ArrowRight, MonitorDown } from "lucide-react";
 import { AuthLayout } from "@/components/AuthLayout";
 import { Button } from "@/components/ui/button";
-import { Kbd } from "@/components/ui/kbd";
 import { fetchStencilStatus } from "@/lib/exam";
 import { saveSession } from "@/lib/auth";
 import {
@@ -134,31 +134,29 @@ export function OnboardingPage({ onLogin }: { onLogin: () => void }) {
             </motion.p>
           )}
         </AnimatePresence>
-        <div className="flex justify-start">
+        <div className="grid gap-2 sm:grid-cols-2">
           <Button type="submit" className="cursor-pointer">
             Continue
-            <Kbd className="h-4 border-primary-foreground/30 bg-primary-foreground/10 px-1 text-[9px] text-primary-foreground">
-              Enter
-            </Kbd>
+            <ArrowRight />
           </Button>
           <Button
             type="button"
             variant="secondary"
             onClick={startDemo}
             disabled={startingDemo}
-            className="ml-2 cursor-pointer"
+            className="cursor-pointer"
           >
             {startingDemo ? "Starting demo…" : "Open DEMO MODE"}
           </Button>
         </div>
-        <Button
-          type="button"
-          variant="ghost"
-          onClick={() => navigate("/status", { state: { dir: 1 } })}
-          className="w-fit cursor-pointer px-0 text-muted-foreground"
-        >
-          View technology status
-        </Button>
+        <div className="flex flex-wrap items-center gap-x-4 border-t pt-3">
+          <button type="button" onClick={() => navigate("/status", { state: { dir: 1 } })} className="inline-flex min-h-9 items-center gap-2 text-xs font-semibold text-muted-foreground hover:text-foreground">
+            <Activity className="size-3.5" /> System status
+          </button>
+          <button type="button" onClick={() => navigate("/download", { state: { dir: 1 } })} className="inline-flex min-h-9 items-center gap-2 text-xs font-semibold text-muted-foreground hover:text-foreground">
+            <MonitorDown className="size-3.5" /> Get the desktop app
+          </button>
+        </div>
       </form>
     </AuthLayout>
   );

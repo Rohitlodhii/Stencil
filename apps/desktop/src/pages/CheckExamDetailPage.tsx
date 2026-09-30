@@ -137,7 +137,7 @@ export function CheckExamDetailPage() {
 
   if (loading) {
     return (
-      <main className="mx-auto flex min-h-full w-full max-w-5xl flex-col gap-6 p-6">
+      <main className="app-page max-w-6xl">
         <p className="text-sm text-muted-foreground">Loading exam…</p>
       </main>
     );
@@ -145,7 +145,7 @@ export function CheckExamDetailPage() {
 
   if (error || !exam) {
     return (
-      <main className="mx-auto flex min-h-full w-full max-w-5xl flex-col gap-6 p-6">
+      <main className="app-page max-w-6xl">
         <button
           type="button"
           onClick={() => navigate("/check-exam")}
@@ -160,7 +160,7 @@ export function CheckExamDetailPage() {
   }
 
   return (
-    <main className="mx-auto flex min-h-full w-full max-w-5xl flex-col gap-6 p-6">
+    <main className="app-page max-w-6xl">
       <button
         type="button"
         onClick={() => navigate("/check-exam")}
@@ -171,7 +171,7 @@ export function CheckExamDetailPage() {
       </button>
 
       <div className="flex flex-wrap items-center gap-2">
-        <h1 className="font-title text-3xl font-bold leading-none tracking-tight">
+        <h1 className="font-title text-2xl font-semibold leading-tight sm:text-[1.75rem]">
           {exam.subject_name}
         </h1>
         <Badge variant="secondary">#{exam.id}</Badge>
@@ -198,7 +198,7 @@ export function CheckExamDetailPage() {
           { k: "Paper pages", v: String(exam.question_pages.length) },
           { k: "Students", v: total > 0 ? String(total) : exam.student_label || "—" },
         ].map((s) => (
-          <Card key={s.k} className="border-0 bg-sidebar shadow-none">
+          <Card key={s.k}>
             <CardContent className="flex flex-col gap-1 p-4">
               <span className="text-xs text-muted-foreground">{s.k}</span>
               <span className="truncate text-lg font-bold" title={s.v}>
@@ -211,7 +211,7 @@ export function CheckExamDetailPage() {
 
       {/* ---- question paper + syllabus shortcut cards ---- */}
       <div className="grid gap-3 sm:grid-cols-2">
-        <Card className="h-12 flex-row items-center gap-2 border-0 bg-sidebar px-4 py-0 shadow-none">
+        <Card className="h-12 flex-row items-center gap-2 px-4 py-0">
           <FileText className="size-5 shrink-0" />
           <span className="font-title min-w-0 flex-1 truncate text-sm font-bold tracking-tight">
             Question paper
@@ -227,7 +227,7 @@ export function CheckExamDetailPage() {
           </Button>
         </Card>
 
-        <Card className="h-12 flex-row items-center gap-2 border-0 bg-sidebar px-4 py-0 shadow-none">
+        <Card className="h-12 flex-row items-center gap-2 px-4 py-0">
           <BookOpenText className="size-5 shrink-0" />
           <span className="font-title min-w-0 flex-1 truncate text-sm font-bold tracking-tight">
             Syllabus

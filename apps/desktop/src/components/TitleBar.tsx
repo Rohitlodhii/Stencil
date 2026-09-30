@@ -4,12 +4,14 @@ import { Maximize2, Minimize2, Minus, Moon, PanelLeft, Sun, X } from "lucide-rea
 import { cn } from "@/lib/utils";
 import { useTheme } from "@/lib/theme";
 import { useSidebar } from "@/components/ui/sidebar";
+import { StencilLogo } from "@/components/StencilLogo";
 
 function isTauri() {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 }
 
 export function TitleBar() {
+  const tauri = isTauri();
   const [isMaximized, setIsMaximized] = useState(false);
   const { toggleSidebar } = useSidebar();
   const { theme, toggleTheme } = useTheme();
@@ -68,22 +70,38 @@ export function TitleBar() {
     <header
       data-tauri-drag-region
       onDoubleClick={handleToggleMaximize}
-      className="flex h-9 w-full shrink-0 items-center justify-between border-b border-border bg-background select-none"
+      className={cn(
+        "flex w-full shrink-0 items-center justify-between border-b border-border bg-background select-none",
+        tauri ? "h-9" : "h-11 px-3 sm:px-5",
+      )}
     >
       <div className="flex h-full shrink-0 items-stretch">
-        <button
-          type="button"
-          onClick={toggleSidebar}
-          aria-label="Toggle sidebar"
-          title="Toggle sidebar"
-          className={cn(sidebarBtn)}
-        >
-          <PanelLeft size={16} strokeWidth={1.75} />
-        </button>
+        {tauri ? (
+          <button
+            type="button"
+            onClick={toggleSidebar}
+            aria-label="Toggle sidebar"
+            title="Toggle sidebar"
+            className={cn(sidebarBtn)}
+          >
+            <PanelLeft size={16} strokeWidth={1.75} />
+          </button>
+        ) : (
+          <a href="#/" className="flex items-center gap-2 font-title text-sm font-semibold">
+            <StencilLogo className="size-4.5" />
+            Stencil
+          </a>
+        )}
       </div>
       <div data-tauri-drag-region className="min-w-0 flex-1 self-stretch" />
 
       <div className="flex h-full shrink-0 items-stretch">
+        {!tauri && (
+          <nav className="mr-1 hidden items-center gap-1 sm:flex" aria-label="Product links">
+            <a href="#/status" className="rounded-md px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground">System status</a>
+            <a href="#/download" className="rounded-md px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground">Desktop app</a>
+          </nav>
+        )}
         <button
           type="button"
           onClick={toggleTheme}
@@ -95,7 +113,7 @@ export function TitleBar() {
         >
           {theme === "dark" ? <Sun size={14} /> : <Moon size={14} />}
         </button>
-        <button
+        {tauri && <button
           type="button"
           onClick={handleMinimize}
           aria-label="Minimize"
@@ -103,8 +121,8 @@ export function TitleBar() {
           className={cn(btn)}
         >
           <Minus size={14} strokeWidth={1.75} />
-        </button>
-        <button
+        </button>}
+        {tauri && <button
           type="button"
           onClick={handleToggleMaximize}
           aria-label={isMaximized ? "Restore" : "Maximize"}
@@ -116,8 +134,8 @@ export function TitleBar() {
           ) : (
             <Maximize2 size={13} strokeWidth={1.75} />
           )}
-        </button>
-        <button
+        </button>}
+        {tauri && <button
           type="button"
           onClick={handleClose}
           aria-label="Close"
@@ -125,7 +143,7 @@ export function TitleBar() {
           className={cn(btn, "hover:bg-red-500 hover:text-white")}
         >
           <X size={15} strokeWidth={1.75} />
-        </button>
+        </button>}
       </div>
     </header>
   );
