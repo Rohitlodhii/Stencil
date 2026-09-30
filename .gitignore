@@ -3,6 +3,7 @@ node_modules
 
 # Next.js
 .next
+.next-*
 out
 *.tsbuildinfo
 
@@ -11,6 +12,8 @@ out
 
 # Build output
 dist
+build/
+*.spec
 
 # Python
 .venv
@@ -21,6 +24,7 @@ __pycache__
 
 # Sheet-scanner output (saved scans)
 output/
+.demo-uploads/
 
 # Env
 .env

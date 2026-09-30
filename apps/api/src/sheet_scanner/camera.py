@@ -128,6 +128,8 @@ class CameraLoop:
         self._cooldown_until = 0.0
         self._armed = True
         self._pending_index: int | None = None  # requested camera switch
+        self._camera_available = False
+        self._camera_error: str | None = "Camera has not been checked yet."
         self._stop_event = threading.Event()
         self._thread: threading.Thread | None = None
 
@@ -209,6 +211,8 @@ class CameraLoop:
                 "required_frames": self.tracker.required_frames,
                 "corners": self._corners,
                 "camera_index": self.config.camera_index,
+                "camera_available": self._camera_available,
+                "camera_error": self._camera_error,
             }
 
     def set_camera(self, index: int) -> int:
@@ -258,8 +262,17 @@ class CameraLoop:
 
     # -- internal thread ------------------------------------------------
     def _open(self, index: int) -> tuple[cv2.VideoCapture, bool]:
+        if not self.config.camera_enabled:
+            cap = cv2.VideoCapture()
+            with self._lock:
+                self._camera_available = False
+                self._camera_error = "Camera access is disabled for this scanner session."
+            return cap, False
         cap = cv2.VideoCapture(index)
         ok = cap.isOpened()
+        with self._lock:
+            self._camera_available = ok
+            self._camera_error = None if ok else f"No camera is available at device index {index}."
         if ok:
             print(f"Camera {index} opened.")
         else:
@@ -278,6 +291,9 @@ class CameraLoop:
                 if camera_ok:
                     ok, frame = cap.read()
                     if not ok or frame is None:
+                        with self._lock:
+                            self._camera_available = False
+                            self._camera_error = "The camera stopped returning frames."
                         time.sleep(0.05)
                         continue
                 else:

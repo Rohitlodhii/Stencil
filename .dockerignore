@@ -1,0 +1,17 @@
+**/node_modules
+**/.venv
+.git
+**/.next
+**/.next-*
+**/dist
+**/target
+**/__pycache__
+**/.pytest_cache
+**/*.pyc
+**/scans
+**/.demo-uploads
+.env
+.env.*
+!.env.example
+
+# Keep pyproject.toml, uv.lock, and apps/ available to root-context builds.

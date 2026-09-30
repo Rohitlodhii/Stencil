@@ -18,23 +18,16 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
 
+from collections.abc import Callable
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
 from .camera import CameraLoop, NoSheetError, list_cameras
+from . import __version__
 from .config import ScannerConfig
-
-FRONTEND_ORIGIN = "http://localhost:3000"
-# Tauri dev server + Tauri webview origins (desktop app shell).
-TAURI_ORIGINS = [
-    "http://localhost:1420",
-    "http://127.0.0.1:1420",
-    "tauri://localhost",
-    "https://tauri.localhost",
-]
-ALLOW_ORIGINS = [FRONTEND_ORIGIN, *TAURI_ORIGINS]
 STREAM_FPS = 20
 
 
@@ -73,7 +66,10 @@ async def mjpeg_generator(loop: CameraLoop):
         await asyncio.sleep(1 / STREAM_FPS)
 
 
-def build_app(config: ScannerConfig | None = None) -> FastAPI:
+def build_app(
+    config: ScannerConfig | None = None,
+    shutdown_callback: Callable[[], None] | None = None,
+) -> FastAPI:
     """Create the FastAPI app bound to the given scanner configuration."""
     cfg = config or ScannerConfig()
     loop = CameraLoop(cfg)
@@ -86,19 +82,43 @@ def build_app(config: ScannerConfig | None = None) -> FastAPI:
         finally:
             loop.stop()
 
-    app = FastAPI(title="Sheet Scanner", lifespan=lifespan)
+    app = FastAPI(title="Stencil Scanner Companion", version=__version__, lifespan=lifespan)
 
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=ALLOW_ORIGINS,
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_origins=list(cfg.allowed_origins),
+        allow_credentials=False,
+        allow_methods=["GET", "POST", "OPTIONS"],
+        allow_headers=["Content-Type"],
     )
+
+    @app.get("/", response_class=HTMLResponse, include_in_schema=False)
+    async def control_page():
+        return f"""<!doctype html>
+<html lang=\"en\"><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">
+<title>Stencil Scanner Companion</title>
+<style>body{{font:16px system-ui;margin:0;background:#f4f7f9;color:#17212b}}main{{max-width:640px;margin:8vh auto;padding:28px;background:white;border:1px solid #dce3e8;border-radius:8px}}h1{{font-size:24px}}code{{background:#eef2f4;padding:2px 5px}}button{{padding:10px 16px;border:0;border-radius:5px;background:#164e63;color:white;font-weight:600;cursor:pointer}}small{{color:#52616b}}</style>
+<main><h1>Stencil Scanner Companion</h1><p>Version {__version__} is running on this computer.</p><p>The companion keeps camera access local and accepts requests only from configured Stencil origins.</p><p><a href=\"/docs\">Open API status</a></p>{'<button onclick="fetch(\'/shutdown\',{method:\'POST\'}).then(()=>document.body.innerHTML=\'<main><h1>Scanner stopped</h1><p>You may close this window.</p></main>\')">Stop scanner</button>' if shutdown_callback else ''}<p><small>Local address: <code>127.0.0.1:{cfg.port}</code></small></p></main></html>"""
 
     @app.get("/health")
     async def health():
-        return {"status": "ok"}
+        state = loop.get_status()
+        return {
+            "status": "ok",
+            "version": __version__,
+            "camera_available": state["camera_available"],
+            "service": "stencil-scanner-companion",
+        }
+
+    @app.get("/version")
+    async def version():
+        return {"version": __version__, "service": "stencil-scanner-companion"}
+
+    if shutdown_callback is not None:
+        @app.post("/shutdown", include_in_schema=False)
+        async def shutdown():
+            asyncio.get_running_loop().call_later(0.2, shutdown_callback)
+            return {"status": "stopping"}
 
     @app.get("/stream")
     async def stream():
@@ -114,7 +134,7 @@ def build_app(config: ScannerConfig | None = None) -> FastAPI:
     @app.get("/cameras")
     async def cameras():
         return {
-            "cameras": list_cameras(),
+            "cameras": list_cameras() if cfg.camera_enabled else [],
             "current": loop.get_status()["camera_index"],
         }
 

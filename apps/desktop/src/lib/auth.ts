@@ -6,10 +6,12 @@
  *    A banned email is blocked client-side even before hitting the server.
  */
 
+import { localServiceUrl } from "@/lib/service-url";
+
 export const AUTH_URL =
   import.meta.env.VITE_AUTH_URL ??
   import.meta.env.VITE_GATEWAY_URL ??
-  "http://localhost:8080";
+  localServiceUrl(8080);
 
 export type Role = "coordinator" | "teacher";
 

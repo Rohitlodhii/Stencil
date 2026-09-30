@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { AnimatePresence, motion } from "motion/react";
+import { ArrowLeft } from "lucide-react";
 import { AuthLayout } from "@/components/AuthLayout";
 import { Button } from "@/components/ui/button";
-import { Kbd } from "@/components/ui/kbd";
 import {
   Select,
   SelectContent,
@@ -14,7 +14,7 @@ import {
 import { fetchColleges, isBanned, teacherLogin, teacherRegister } from "@/lib/auth";
 
 const inputCls =
-  "h-9 rounded-md border border-input bg-transparent px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring";
+  "w-full";
 
 export function TeacherAuthPage({ onLogin }: { onLogin: () => void }) {
   const navigate = useNavigate();
@@ -127,6 +127,10 @@ export function TeacherAuthPage({ onLogin }: { onLogin: () => void }) {
                   <span className="text-sm font-medium">Email</span>
                   <input
                     type="email"
+                    name="email"
+                    autoComplete="email"
+                    required
+                    aria-invalid={Boolean(error)}
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="you@college.edu"
@@ -137,6 +141,10 @@ export function TeacherAuthPage({ onLogin }: { onLogin: () => void }) {
                   <span className="text-sm font-medium">Password</span>
                   <input
                     type="password"
+                    name="password"
+                    autoComplete="current-password"
+                    required
+                    aria-invalid={Boolean(error)}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="••••••••"
@@ -150,14 +158,10 @@ export function TeacherAuthPage({ onLogin }: { onLogin: () => void }) {
                     onClick={() => navigate("/", { state: { dir: -1 } })}
                     className="cursor-pointer"
                   >
-                    ← Back
-                    <Kbd>Bck</Kbd>
+                    <ArrowLeft /> Back
                   </Button>
                   <Button type="submit" disabled={loading} className="cursor-pointer">
                     {loading ? "Logging in…" : "Login"}
-                    <Kbd className="h-4 border-primary-foreground/30 bg-primary-foreground/10 px-1 text-[9px] text-primary-foreground">
-                      Enter
-                    </Kbd>
                   </Button>
                 </div>
               </form>
@@ -166,6 +170,9 @@ export function TeacherAuthPage({ onLogin }: { onLogin: () => void }) {
                 <label className="flex flex-col gap-1.5">
                   <span className="text-sm font-medium">Name</span>
                   <input
+                    name="name"
+                    autoComplete="name"
+                    required
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                     placeholder="Your full name"
@@ -176,6 +183,9 @@ export function TeacherAuthPage({ onLogin }: { onLogin: () => void }) {
                   <span className="text-sm font-medium">Email</span>
                   <input
                     type="email"
+                    name="email"
+                    autoComplete="email"
+                    required
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="you@college.edu"
@@ -186,6 +196,9 @@ export function TeacherAuthPage({ onLogin }: { onLogin: () => void }) {
                   <span className="text-sm font-medium">Password</span>
                   <input
                     type="password"
+                    name="password"
+                    autoComplete="new-password"
+                    required
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="Min 6 characters"
@@ -195,6 +208,9 @@ export function TeacherAuthPage({ onLogin }: { onLogin: () => void }) {
                 <label className="flex flex-col gap-1.5">
                   <span className="text-sm font-medium">Teacher ID</span>
                   <input
+                    name="teacher_id"
+                    autoComplete="off"
+                    required
                     value={teacherId}
                     onChange={(e) => setTeacherId(e.target.value)}
                     placeholder="e.g. TCH-042"
@@ -223,14 +239,10 @@ export function TeacherAuthPage({ onLogin }: { onLogin: () => void }) {
                     onClick={() => navigate("/", { state: { dir: -1 } })}
                     className="cursor-pointer"
                   >
-                    ← Back
-                    <Kbd>Bck</Kbd>
+                    <ArrowLeft /> Back
                   </Button>
                   <Button type="submit" disabled={loading} className="cursor-pointer">
                     {loading ? "Registering…" : "Register"}
-                    <Kbd className="h-4 border-primary-foreground/30 bg-primary-foreground/10 px-1 text-[9px] text-primary-foreground">
-                      Enter
-                    </Kbd>
                   </Button>
                 </div>
               </form>
@@ -280,7 +292,7 @@ export function TeacherAuthPage({ onLogin }: { onLogin: () => void }) {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.2 }}
-              className="text-sm text-destructive"
+              className="notice-error"
             >
               {error}
             </motion.p>
@@ -292,7 +304,7 @@ export function TeacherAuthPage({ onLogin }: { onLogin: () => void }) {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.2 }}
-              className="text-sm text-green-600"
+              className="notice-success"
             >
               {info}
             </motion.p>

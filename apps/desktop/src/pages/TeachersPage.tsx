@@ -1,4 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
+import { Check, RefreshCw, UserCheck, UsersRound, X } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { PageHeader } from "@/components/PageHeader";
+import { StatePanel } from "@/components/StatePanel";
 import {
   decideTeacherRequest,
   fetchTeacherRequests,
@@ -6,9 +11,11 @@ import {
   type TeacherRequest,
 } from "@/lib/auth";
 
+const filters = ["pending", "approved", "rejected", "all"] as const;
+
 export function TeachersPage({ session }: { session: Session }) {
   const [requests, setRequests] = useState<TeacherRequest[]>([]);
-  const [filter, setFilter] = useState("pending");
+  const [filter, setFilter] = useState<(typeof filters)[number]>("pending");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [acting, setActing] = useState<number | null>(null);
@@ -44,76 +51,58 @@ export function TeachersPage({ session }: { session: Session }) {
   };
 
   return (
-    <main className="mx-auto flex min-h-full w-full max-w-3xl flex-col gap-6 p-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Teachers</h1>
-        <p className="text-sm text-muted-foreground">
-          Approve teacher registrations for {session.user.college}.
-        </p>
+    <main className="app-page max-w-6xl">
+      <PageHeader
+        title="Examiner management"
+        description={`Review access requests and examiner status for ${session.user.college}.`}
+        icon={UsersRound}
+        actions={<Button variant="outline" onClick={load} disabled={loading}><RefreshCw className={loading ? "animate-spin" : ""} /> Refresh</Button>}
+      />
+
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="segmented-control" aria-label="Filter examiner requests">
+          {filters.map((status) => (
+            <button key={status} type="button" aria-pressed={filter === status} onClick={() => setFilter(status)}>
+              {status}
+            </button>
+          ))}
+        </div>
+        <p className="text-xs text-muted-foreground">{requests.length} {filter === "all" ? "record" : `${filter} request`}{requests.length === 1 ? "" : "s"}</p>
       </div>
 
-      <div className="flex items-center gap-2">
-        {(["pending", "approved", "rejected", "all"] as const).map((s) => (
-          <button
-            key={s}
-            type="button"
-            onClick={() => setFilter(s)}
-            className={`inline-flex h-7 items-center rounded-md border px-2 text-xs capitalize ${
-              filter === s ? "bg-primary text-primary-foreground" : "bg-background"
-            }`}
-          >
-            {s}
-          </button>
-        ))}
-        <button
-          type="button"
-          onClick={load}
-          className="ml-auto inline-flex h-7 items-center rounded-md border px-2 text-xs"
-        >
-          Refresh
-        </button>
-      </div>
-
-      {loading && <p className="text-sm text-muted-foreground">Loading…</p>}
-      {error && <p className="text-sm text-destructive">{error}</p>}
-      {!loading && requests.length === 0 && (
-        <p className="text-sm text-muted-foreground">No {filter} requests.</p>
+      {loading && <StatePanel state="loading" title="Loading examiner requests" />}
+      {error && <StatePanel state="error" title="Examiner requests unavailable" description={error} action={<Button variant="outline" onClick={load}>Try again</Button>} />}
+      {!loading && !error && requests.length === 0 && (
+        <StatePanel state="empty" title={`No ${filter} requests`} description="Requests matching this status will appear here." />
       )}
-      <div className="flex flex-col gap-3">
-        {requests.map((r) => (
-          <div key={r.id} className="flex flex-col gap-2 rounded-lg border p-4 sm:flex-row sm:items-center">
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-semibold">
-                {r.name} <span className="font-normal text-muted-foreground">({r.teacher_id})</span>
-              </p>
-              <p className="truncate text-sm text-muted-foreground">{r.email}</p>
-              <p className="text-xs text-muted-foreground">
-                {r.college} · {r.status} · {new Date(r.created_at).toLocaleString()}
-              </p>
-            </div>
-            {r.status === "pending" && (
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  disabled={acting === r.id}
-                  onClick={() => decide(r.id, "approved")}
-                  className="inline-flex h-8 items-center rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-                >
-                  Accept
-                </button>
-                <button
-                  type="button"
-                  disabled={acting === r.id}
-                  onClick={() => decide(r.id, "rejected")}
-                  className="inline-flex h-8 items-center rounded-md border border-destructive px-3 text-xs font-medium text-destructive hover:bg-destructive/10 disabled:opacity-50"
-                >
-                  Decline
-                </button>
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
+
+      {!loading && !error && requests.length > 0 && (
+        <div className="table-panel">
+          <table>
+            <thead>
+              <tr><th>Examiner</th><th>Teacher ID</th><th>Status</th><th>Requested</th><th className="text-right">Action</th></tr>
+            </thead>
+            <tbody>
+              {requests.map((request) => (
+                <tr key={request.id}>
+                  <td><p className="font-semibold">{request.name}</p><p className="text-xs text-muted-foreground">{request.email}</p></td>
+                  <td className="whitespace-nowrap font-mono text-xs">{request.teacher_id}</td>
+                  <td><Badge variant={request.status === "approved" ? "secondary" : request.status === "rejected" ? "destructive" : "outline"}><UserCheck /> {request.status}</Badge></td>
+                  <td className="whitespace-nowrap text-xs text-muted-foreground">{new Date(request.created_at).toLocaleDateString()}</td>
+                  <td>
+                    {request.status === "pending" ? (
+                      <div className="flex justify-end gap-2">
+                        <Button size="sm" disabled={acting === request.id} onClick={() => decide(request.id, "approved")}><Check /> Approve</Button>
+                        <Button size="sm" variant="outline" disabled={acting === request.id} onClick={() => decide(request.id, "rejected")}><X /> Decline</Button>
+                      </div>
+                    ) : <span className="block text-right text-xs text-muted-foreground">No action required</span>}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </main>
   );
 }

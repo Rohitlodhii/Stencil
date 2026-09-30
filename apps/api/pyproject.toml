@@ -10,7 +10,7 @@ dependencies = [
   "langchain-core>=0.3.0",
   "langchain-openai>=0.3.0",
   "numpy>=2.5.3",
-  "opencv-python>=5.0.0.93",
+  "opencv-python-headless>=4.10,<5",
   "openai>=1.0.0",
   "pillow>=11.0.0",
   "psycopg[binary]>=3.1.0",
@@ -23,6 +23,12 @@ dependencies = [
 
 [project.scripts]
 sheet-scanner = "sheet_scanner.main:main"
+stencil-scanner = "sheet_scanner.companion:main"
+
+[dependency-groups]
+scanner-build = [
+  "pyinstaller>=6.11,<7",
+]
 
 [tool.uv.sources]
 
@@ -30,8 +36,5 @@ sheet-scanner = "sheet_scanner.main:main"
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
-[tool.hatch.build]
-force-include = { "src/sheet_scanner" = "sheet_scanner" }
-
 [tool.hatch.build.targets.wheel]
-packages = ["app"]
+packages = ["app", "src/sheet_scanner"]

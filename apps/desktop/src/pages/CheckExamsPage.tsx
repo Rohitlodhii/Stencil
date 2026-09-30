@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ClipboardCheck, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { PageHeader } from "@/components/PageHeader";
+import { StatePanel } from "@/components/StatePanel";
 import type { Session } from "@/lib/auth";
 import { fetchFinalExams, type FinalExam } from "@/lib/exam";
 
@@ -28,45 +30,23 @@ export function CheckExamsPage({ session }: { session: Session }) {
   }, [load]);
 
   return (
-    <main className="mx-auto flex min-h-full w-full max-w-5xl flex-col gap-4 p-6">
-      <div className="flex items-center gap-2">
-        <ClipboardCheck className="size-7" />
-        <h1 className="font-title text-3xl font-bold leading-none tracking-tight">
-          Check Exam
-        </h1>
-      </div>
-      <p className="text-sm text-muted-foreground">
-        All exams assigned to {session.user.name} — press Check on any row to
-        open its question paper, syllabus and students.
-      </p>
+    <main className="app-page max-w-6xl">
+      <PageHeader title="Assigned examinations" icon={ClipboardCheck} description={`Review question papers, rubrics, and student scripts assigned to ${session.user.name}.`} actions={<Button type="button" variant="outline" onClick={load}><RefreshCw /> Refresh</Button>} />
 
       <section className="flex flex-col gap-3">
         <div className="flex items-center gap-2">
-          <h2 className="font-title text-xl font-bold tracking-tight">
-            Assigned exams
-          </h2>
-          <Button
-            type="button"
-            variant="secondary"
-            onClick={load}
-            className="ml-auto h-7 cursor-pointer text-xs"
-          >
-            <RefreshCw className="size-3.5" />
-            Refresh
-          </Button>
+          <h2 className="section-heading">Examination queue</h2>
         </div>
 
-        {loading && <p className="text-sm text-muted-foreground">Loading…</p>}
-        {error && <p className="text-sm text-destructive">{error}</p>}
+        {loading && <StatePanel state="loading" title="Loading examination queue" />}
+        {error && <StatePanel state="error" title="Queue unavailable" description={error} action={<Button variant="outline" onClick={load}>Try again</Button>} />}
 
         {!loading && !error && exams.length === 0 && (
-          <p className="text-sm text-muted-foreground">
-            No exams assigned to you yet.
-          </p>
+          <StatePanel state="empty" title="No assigned examinations" description="Assigned examinations will appear here when they are ready for evaluation." />
         )}
 
         {exams.length > 0 && (
-          <div className="overflow-x-auto rounded-md border">
+          <div className="table-panel">
             <table className="w-full border-collapse text-sm">
               <thead>
                 <tr className="bg-muted text-left">
@@ -94,12 +74,9 @@ export function CheckExamsPage({ session }: { session: Session }) {
                       <Button
                         type="button"
                         onClick={() => navigate(`/check-exam/${e.id}`)}
-                        className="h-7 cursor-pointer p-1 pr-3 text-xs"
+                        className="h-8 cursor-pointer text-xs"
                       >
-                        <span className="flex h-full aspect-square items-center justify-center rounded-sm bg-secondary p-1 text-secondary-foreground">
-                          <ClipboardCheck className="size-3.5" />
-                        </span>
-                        Check
+                        <ClipboardCheck className="size-3.5" /> Evaluate
                       </Button>
                     </td>
                   </tr>

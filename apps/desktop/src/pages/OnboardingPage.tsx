@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { AnimatePresence, motion } from "motion/react";
+import { Activity, ArrowRight, MonitorDown } from "lucide-react";
 import { AuthLayout } from "@/components/AuthLayout";
 import { Button } from "@/components/ui/button";
-import { Kbd } from "@/components/ui/kbd";
+import { fetchStencilStatus } from "@/lib/exam";
+import { saveSession } from "@/lib/auth";
 import {
   Select,
   SelectContent,
@@ -17,10 +19,11 @@ const HINTS: Record<string, string> = {
   teacher: "Teachers can register with their college, then login once approved.",
 };
 
-export function OnboardingPage() {
+export function OnboardingPage({ onLogin }: { onLogin: () => void }) {
   const navigate = useNavigate();
   const [role, setRole] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
+  const [startingDemo, setStartingDemo] = useState(false);
 
   const onSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -35,6 +38,37 @@ export function OnboardingPage() {
     navigate(role === "coordinator" ? "/login/coordinator" : "/login/teacher", {
       state: { dir: 1 },
     });
+  };
+
+  const startDemo = async () => {
+    setStartingDemo(true);
+    setError(null);
+    try {
+      const status = await fetchStencilStatus();
+      if (!status.demo_mode) {
+        throw new Error("Demo mode is disabled. Start the API with STENCIL_DEMO_MODE=true.");
+      }
+      saveSession({
+        token: "local-demo-session",
+        user: {
+          role: "teacher",
+          name: "Demo Teacher",
+          college: "Stencil Local Demo",
+          teacher_id: "DEMO-TEACHER",
+          status: "demo",
+        },
+      });
+      onLogin();
+      navigate("/check-exam/900001", { replace: true });
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Demo services are unavailable. Check the local API status.",
+      );
+    } finally {
+      setStartingDemo(false);
+    }
   };
 
   // Enter anywhere continues (the select-only form has no text inputs for
@@ -100,13 +134,28 @@ export function OnboardingPage() {
             </motion.p>
           )}
         </AnimatePresence>
-        <div className="flex justify-start">
+        <div className="grid gap-2 sm:grid-cols-2">
           <Button type="submit" className="cursor-pointer">
             Continue
-            <Kbd className="h-4 border-primary-foreground/30 bg-primary-foreground/10 px-1 text-[9px] text-primary-foreground">
-              Enter
-            </Kbd>
+            <ArrowRight />
           </Button>
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={startDemo}
+            disabled={startingDemo}
+            className="cursor-pointer"
+          >
+            {startingDemo ? "Starting demo…" : "Open DEMO MODE"}
+          </Button>
+        </div>
+        <div className="flex flex-wrap items-center gap-x-4 border-t pt-3">
+          <button type="button" onClick={() => navigate("/status", { state: { dir: 1 } })} className="inline-flex min-h-9 items-center gap-2 text-xs font-semibold text-muted-foreground hover:text-foreground">
+            <Activity className="size-3.5" /> System status
+          </button>
+          <button type="button" onClick={() => navigate("/download", { state: { dir: 1 } })} className="inline-flex min-h-9 items-center gap-2 text-xs font-semibold text-muted-foreground hover:text-foreground">
+            <MonitorDown className="size-3.5" /> Get the desktop app
+          </button>
         </div>
       </form>
     </AuthLayout>

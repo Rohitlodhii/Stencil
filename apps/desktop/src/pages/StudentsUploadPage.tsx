@@ -206,8 +206,8 @@ export function StudentsUploadPage({ session }: { session: Session }) {
 
   if (saved) {
     return (
-      <main className="mx-auto flex min-h-full w-full max-w-3xl flex-col gap-6 p-6">
-        <Card className="border-0 bg-sidebar shadow-none">
+      <main className="app-page max-w-4xl">
+        <Card>
           <CardHeader>
             <CardTitle className="font-title text-xl font-bold tracking-tight">
               Students saved
@@ -250,10 +250,10 @@ export function StudentsUploadPage({ session }: { session: Session }) {
   }
 
   return (
-    <main className="mx-auto flex min-h-full w-full max-w-3xl flex-col gap-6 p-6">
+    <main className="app-page max-w-4xl">
       <div className="flex items-center gap-2">
         <FileSpreadsheet className="size-7" />
-        <h1 className="font-title text-3xl font-bold leading-none tracking-tight">
+        <h1 className="font-title text-2xl font-semibold leading-tight sm:text-[1.75rem]">
           Add student data
         </h1>
       </div>
@@ -262,7 +262,7 @@ export function StudentsUploadPage({ session }: { session: Session }) {
       </p>
 
       {step === 1 && (
-        <Card className="border-0 bg-sidebar shadow-none">
+        <Card>
           <CardHeader>
             <CardTitle className="font-title text-xl font-bold tracking-tight">
               Student details
@@ -432,7 +432,7 @@ export function StudentsUploadPage({ session }: { session: Session }) {
 
       {step === 2 && (
         <>
-          <Card className="border-0 bg-sidebar shadow-none">
+          <Card>
             <CardHeader>
               <div className="flex items-center gap-2">
                 <CardTitle className="font-title text-xl font-bold tracking-tight">

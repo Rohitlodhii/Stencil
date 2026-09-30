@@ -194,7 +194,7 @@ export function StudentsDetailPage() {
 
   if (loading) {
     return (
-      <main className="mx-auto flex min-h-full w-full max-w-5xl flex-col gap-6 p-6">
+      <main className="app-page max-w-6xl">
         <p className="text-sm text-muted-foreground">Loading…</p>
       </main>
     );
@@ -202,7 +202,7 @@ export function StudentsDetailPage() {
 
   if (error || !dataset) {
     return (
-      <main className="mx-auto flex min-h-full w-full max-w-5xl flex-col gap-6 p-6">
+      <main className="app-page max-w-6xl">
         <button
           type="button"
           onClick={() => navigate("/students")}
@@ -217,7 +217,7 @@ export function StudentsDetailPage() {
   }
 
   return (
-    <main className="mx-auto flex min-h-full w-full max-w-5xl flex-col gap-6 p-6">
+    <main className="app-page max-w-6xl">
       <button
         type="button"
         onClick={() => navigate("/students")}
@@ -228,7 +228,7 @@ export function StudentsDetailPage() {
       </button>
 
       <div className="flex items-center gap-2">
-        <h1 className="font-title text-3xl font-bold leading-none tracking-tight">
+        <h1 className="font-title text-2xl font-semibold leading-tight sm:text-[1.75rem]">
           {dataset.subject_name}
         </h1>
         <Button

@@ -1,13 +1,13 @@
-# Turborepo — Next.js + FastAPI
+# Stencil
 
-A Turborepo monorepo containing two **completely independent** applications:
+Stencil is a university examination workspace with a React/Vite and Tauri client,
+FastAPI examination and authentication services, an API gateway, an optional local
+OpenCV scanner, and PostgreSQL persistence. The repository uses pnpm and uv
+workspaces with committed lockfiles.
 
-- `apps/web` — Next.js frontend (React, TypeScript, App Router, Tailwind CSS, ESLint)
-- `apps/api` — Python FastAPI backend (FastAPI, Uvicorn, Pydantic, managed with `uv`)
-
-There is **no integration** between them: no CORS, no API calls from frontend to backend,
-no shared types, env vars, auth, proxy/rewrites, or shared logic. Turborepo only
-orchestrates their tasks from the same repository.
+The primary frontend is `apps/desktop`; `apps/web` is a small legacy Next.js scanner
+surface. Render architecture, deployment blockers, environment variables, and exact
+validation commands are documented in [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md).
 
 ## Project Structure
 

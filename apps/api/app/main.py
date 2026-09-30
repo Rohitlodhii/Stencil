@@ -20,14 +20,17 @@ from datetime import datetime, timezone
 from io import BytesIO
 from pathlib import Path
 from typing import Literal
+from urllib.request import urlopen
 
 import boto3
 import psycopg
 from botocore.exceptions import BotoCoreError, ClientError
 from psycopg.rows import dict_row
 from dotenv import load_dotenv
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from botocore.config import Config
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from openai import AsyncOpenAI
@@ -42,6 +45,14 @@ load_dotenv(_ROOT_ENV, override=False)
 LUNA_API_KEY = os.getenv("LUNA_API_KEY", "")
 LUNA_BASE_URL = os.getenv("LUNA_BASE_URL", "https://api.apinex.bond/v1")
 LUNA_MODEL = os.getenv("LUNA_MODEL", "free/gpt-6-luna")
+STENCIL_DEMO_MODE = os.getenv("STENCIL_DEMO_MODE", "").strip().lower() in {"1", "true", "yes", "on"}
+DEMO_PUBLIC_BASE_URL = os.getenv("STENCIL_DEMO_PUBLIC_BASE_URL", "").rstrip("/")
+SCANNER_SERVICE_URL = os.getenv("SCANNER_URL", "http://127.0.0.1:8000").rstrip("/")
+SCANNER_SERVER_PROBE = os.getenv("SCANNER_SERVER_PROBE", "").strip().lower() in {"1", "true", "yes", "on"}
+
+# CORS origins: comma-separated list, default to localhost:3000 for local dev
+CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000")
+ALLOWED_ORIGINS = [origin.strip() for origin in CORS_ORIGINS.split(",")]
 
 S3_BUCKET = os.getenv("S3_BUCKET", "mponline-images-398218088339")
 AWS_REGION = os.getenv("AWS_REGION", os.getenv("AWS_DEFAULT_REGION", "ap-south-1"))
@@ -68,7 +79,106 @@ PDF_RENDER_DPI = 150
 # ---- student csv uploads ----
 MAX_CSV_BYTES = 10 * 1024 * 1024
 
+
+def analyze_image_quality(data: bytes) -> dict:
+    """Apply small, explainable document-image checks; no learned model is used."""
+    import cv2
+    import numpy as np
+
+    image = cv2.imdecode(np.frombuffer(data, dtype=np.uint8), cv2.IMREAD_COLOR)
+    if image is None or image.size == 0:
+        raise HTTPException(status_code=415, detail="unsupported or unreadable image data")
+    height, width = image.shape[:2]
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    blur_score = float(cv2.Laplacian(gray, cv2.CV_64F).var())
+    contrast_score = float(gray.std())
+    margin = max(2, int(min(height, width) * 0.025))
+    ink = gray < max(90, float(gray.mean()) - 35)
+    border = np.concatenate(
+        [
+            ink[:margin, :].ravel(),
+            ink[-margin:, :].ravel(),
+            ink[:, :margin].ravel(),
+            ink[:, -margin:].ravel(),
+        ]
+    )
+    border_ink_ratio = float(border.mean())
+    page_ratio = min(width, height) / max(width, height)
+    warnings: list[dict] = []
+    if blur_score < 65:
+        warnings.append({"code": "BLURRY_IMAGE", "severity": "error", "message": "Image appears blurry; retake it with the page in focus.", "confidence": "high" if blur_score < 35 else "medium"})
+    if contrast_score < 22:
+        warnings.append({"code": "VERY_LOW_CONTRAST", "severity": "error", "message": "Image has very low contrast; use brighter, even lighting.", "confidence": "high" if contrast_score < 14 else "medium"})
+    if border_ink_ratio > 0.08 or page_ratio < 0.5:
+        warnings.append({"code": "CROPPED_OR_INCOMPLETE_PAGE", "severity": "error", "message": "Content may touch the image edge or part of the page may be cropped.", "confidence": "medium"})
+    if width < 900 or height < 900:
+        warnings.append({"code": "LOW_RESOLUTION", "severity": "warning", "message": "Image resolution is below 900 x 900 pixels.", "confidence": "high"})
+    return {
+        "passed": not any(item["severity"] == "error" for item in warnings),
+        "width": width,
+        "height": height,
+        "blur_score": round(blur_score, 1),
+        "contrast_score": round(contrast_score, 1),
+        "border_ink_ratio": round(border_ink_ratio, 3),
+        "warnings": warnings,
+    }
+
 app = FastAPI(title="MPOnline API — Luna + S3")
+
+DEMO_EXAM_ID = 900001
+DEMO_DATASET_ID = 900001
+DEMO_UPLOAD_DIR = _HERE.parents[1] / ".demo-uploads"
+DEMO_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+app.mount("/demo-uploads", StaticFiles(directory=DEMO_UPLOAD_DIR), name="demo-uploads")
+
+DEMO_QUESTIONS = [
+    {"q_no": "1", "section": "A", "text": "Explain the difference between a compiler and an interpreter.", "marks": 5, "page": 1, "sub_questions": []},
+    {"q_no": "2", "section": "A", "text": "Trace a binary search for 23 in the given sorted list.", "marks": 5, "page": 1, "sub_questions": []},
+    {"q_no": "3", "section": "B", "text": "Design an algorithm to find duplicate values in an array and discuss its complexity.", "marks": 10, "page": 2, "sub_questions": []},
+]
+DEMO_STUDENTS = [
+    {"Student Name": "Aarav Sharma", "Total Marks": "20", "Obtained Marks": "", "Attendance": "Present"},
+    {"Student Name": "Diya Patel", "Total Marks": "20", "Obtained Marks": "", "Attendance": "Present"},
+    {"Student Name": "Kabir Singh", "Total Marks": "20", "Obtained Marks": "", "Attendance": "Present"},
+]
+DEMO_MARKS: dict[tuple[int, int], dict] = {}
+
+
+def _demo_exam_detail() -> dict:
+    return {
+        "id": DEMO_EXAM_ID,
+        "subject_name": "Computer Science - Demo Examination",
+        "syllabus_exam_id": None,
+        "syllabus_summary": "Seeded local demonstration covering language translation, searching, and algorithm design.",
+        "questions": DEMO_QUESTIONS,
+        "total_marks": 20,
+        "total_questions": len(DEMO_QUESTIONS),
+        "question_pages": [],
+        "assigned_teacher": "Demo Teacher",
+        "student_dataset_id": DEMO_DATASET_ID,
+        "student_label": f"MVP Demo Class ({len(DEMO_STUDENTS)} students)",
+        "created_at": "2026-01-01T09:00:00+00:00",
+        "demo": True,
+    }
+
+
+def _demo_dataset() -> dict:
+    return {
+        "id": DEMO_DATASET_ID,
+        "branch": "Computer Science",
+        "semester": "MVP Demo",
+        "assigned_teacher": "Demo Teacher",
+        "subject_name": "Computer Science - Demo Examination",
+        "original_filename": "seeded-demo-students.csv",
+        "s3_url": "",
+        "s3_key": "",
+        "columns": ["Student Name", "Total Marks", "Obtained Marks", "Attendance"],
+        "mapping": {"student_name": "Student Name", "total_marks": "Total Marks", "obtained_marks": "Obtained Marks", "attendance": "Attendance"},
+        "row_count": len(DEMO_STUDENTS),
+        "preview": DEMO_STUDENTS,
+        "created_at": "2026-01-01T09:00:00+00:00",
+        "demo": True,
+    }
 
 app.add_middleware(
     CORSMiddleware,
@@ -185,6 +295,24 @@ def init_exam_db() -> None:
                 preview_json JSONB NOT NULL DEFAULT '[]',
                 created_at TIMESTAMPTZ NOT NULL DEFAULT now()
             );
+            CREATE TABLE IF NOT EXISTS student_marks (
+                id SERIAL PRIMARY KEY,
+                final_exam_id INTEGER NOT NULL REFERENCES final_exams(id) ON DELETE CASCADE,
+                student_index INTEGER NOT NULL,
+                student_name TEXT NOT NULL DEFAULT '',
+                answer_sheet_urls JSONB NOT NULL DEFAULT '[]',
+                evaluations_json JSONB NOT NULL DEFAULT '[]',
+                awarded_marks NUMERIC NOT NULL DEFAULT 0,
+                max_marks NUMERIC NOT NULL DEFAULT 0,
+                feedback TEXT NOT NULL DEFAULT '',
+                updated_by TEXT NOT NULL DEFAULT '',
+                moderation_status TEXT NOT NULL DEFAULT 'pending',
+                created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                UNIQUE (final_exam_id, student_index)
+            );
+            ALTER TABLE student_marks
+                ADD COLUMN IF NOT EXISTS moderation_status TEXT NOT NULL DEFAULT 'pending';
             """
         )
 
@@ -400,15 +528,69 @@ async def root():
     }
 
 
+def _service_status() -> dict:
+    database_available = False
+    database_error = ""
+    try:
+        with psycopg.connect(EXAM_DATABASE_URL, connect_timeout=1) as conn:
+            conn.execute("SELECT 1")
+        database_available = True
+    except Exception as exc:
+        database_error = str(exc).strip().splitlines()[0][:200]
+
+    storage_available = False
+    storage_error = ""
+    try:
+        boto3.client(
+            "s3",
+            region_name=AWS_REGION,
+            config=Config(connect_timeout=1, read_timeout=1, retries={"max_attempts": 0}),
+        ).head_bucket(Bucket=S3_BUCKET)
+        storage_available = True
+    except Exception as exc:
+        storage_error = str(exc).strip().splitlines()[0][:200]
+
+    scanner_available = False
+    scanner_error = "Local scanner companion required on the examiner's computer."
+    if SCANNER_SERVER_PROBE:
+        try:
+            with urlopen(f"{SCANNER_SERVICE_URL}/health", timeout=0.75) as response:
+                scanner_available = response.status < 500
+                scanner_error = "" if scanner_available else "Scanner health check failed."
+        except Exception as exc:
+            scanner_error = str(exc).strip().splitlines()[0][:200]
+
+    return {
+        "status": "ok" if STENCIL_DEMO_MODE or (database_available and storage_available) else "degraded",
+        "demo_mode": STENCIL_DEMO_MODE,
+        "ai": {"available": bool(LUNA_API_KEY), "model": LUNA_MODEL},
+        "scanner": {
+            "available": scanner_available,
+            "url": SCANNER_SERVICE_URL,
+            "error": scanner_error,
+            "mode": "server_probe" if SCANNER_SERVER_PROBE else "local_companion",
+        },
+        "database": {"available": database_available, "error": database_error},
+        "storage": {
+            "available": STENCIL_DEMO_MODE or storage_available,
+            "s3_available": storage_available,
+            "mode": "local" if STENCIL_DEMO_MODE else "s3",
+            "local_demo_available": STENCIL_DEMO_MODE,
+            "bucket": S3_BUCKET,
+            "error": storage_error,
+        },
+    }
+
+
 @app.get("/health")
 async def health():
-    return {
-        "status": "ok",
-        "luna_model": LUNA_MODEL,
-        "luna_configured": bool(LUNA_API_KEY),
-        "s3_bucket": S3_BUCKET,
-        "aws_region": AWS_REGION,
-    }
+    return _service_status()
+
+
+@app.get("/status")
+async def status():
+    """Report demo, AI, database, and storage readiness without exposing secrets."""
+    return _service_status()
 
 
 @app.get("/config")
@@ -446,7 +628,7 @@ async def chat(body: ChatRequest):
 
 
 @app.post("/upload-image")
-async def upload_image(file: UploadFile = File(...)):
+async def upload_image(request: Request, file: UploadFile = File(...)):
     """Upload an image to the public S3 bucket and return its public URL."""
     if not file.content_type or not file.content_type.startswith("image/"):
         raise HTTPException(status_code=415, detail=f"not an image: {file.content_type}")
@@ -464,6 +646,22 @@ async def upload_image(file: UploadFile = File(...)):
         raise HTTPException(status_code=422, detail="empty file")
     if len(data) > MAX_IMAGE_BYTES:
         raise HTTPException(status_code=413, detail="image larger than 10 MB")
+    quality = analyze_image_quality(data)
+
+    if STENCIL_DEMO_MODE:
+        filename = f"{uuid.uuid4().hex}{ext}"
+        target = DEMO_UPLOAD_DIR / filename
+        target.write_bytes(data)
+        return {
+            "url": f"{DEMO_PUBLIC_BASE_URL or str(request.base_url).rstrip('/')}/demo-uploads/{filename}",
+            "key": f"demo-uploads/{filename}",
+            "bucket": "local-demo",
+            "region": "local",
+            "content_type": file.content_type,
+            "size_bytes": len(data),
+            "quality": quality,
+            "demo": True,
+        }
 
     day = datetime.now(timezone.utc).strftime("%Y%m%d")
     key = f"uploads/{day}/{uuid.uuid4().hex}{ext}"
@@ -482,7 +680,10 @@ async def upload_image(file: UploadFile = File(...)):
             ExtraArgs={"ContentType": content_type},
         )
     except (ClientError, BotoCoreError) as exc:
-        raise HTTPException(status_code=502, detail=f"s3 upload failed: {exc}")
+        raise HTTPException(
+            status_code=503,
+            detail=f"Demo mode is disabled and storage is unavailable: {exc}",
+        )
 
     return {
         "url": public_s3_url(key),
@@ -491,6 +692,7 @@ async def upload_image(file: UploadFile = File(...)):
         "region": AWS_REGION,
         "content_type": content_type,
         "size_bytes": len(data),
+        "quality": quality,
     }
 
 
@@ -1000,6 +1202,9 @@ async def create_final_exam(body: FinalExamCreate):
 async def list_final_exams(teacher: str = ""):
     """List created exams; pass ?teacher=<name> so a teacher sees only their own."""
     teacher = (teacher or "").strip()
+    if STENCIL_DEMO_MODE and (not teacher or teacher == "Demo Teacher"):
+        exam = _demo_exam_detail()
+        return {"exams": [{key: exam[key] for key in ("id", "subject_name", "total_marks", "total_questions", "assigned_teacher", "student_dataset_id", "student_label", "created_at")} ]}
     try:
         with psycopg.connect(EXAM_DATABASE_URL, row_factory=dict_row) as conn:
             if teacher:
@@ -1041,6 +1246,10 @@ async def list_final_exams(teacher: str = ""):
 @app.get("/exam/final/{exam_id}")
 async def get_final_exam(exam_id: int):
     """Full detail for one exam: questions, pages, syllabus + linked students."""
+    if exam_id == DEMO_EXAM_ID:
+        if not STENCIL_DEMO_MODE:
+            raise HTTPException(status_code=404, detail="Demo mode is disabled; the seeded demo examination is unavailable.")
+        return _demo_exam_detail()
     try:
         with psycopg.connect(EXAM_DATABASE_URL, row_factory=dict_row) as conn:
             r = conn.execute(
@@ -1071,6 +1280,843 @@ async def get_final_exam(exam_id: int):
         "student_label": r["student_label"] or "",
         "created_at": str(r["created_at"]),
     }
+
+
+class AnswerSheetAnalyzeRequest(BaseModel):
+    final_exam_id: int
+    student_index: int = Field(ge=0)
+    student_name: str = ""
+    image_urls: list[str] = Field(default_factory=list, min_length=1)
+
+
+class AnswerEvaluationItem(BaseModel):
+    q_no: str
+    question_text: str = ""
+    association: str = ""
+    max_marks: float
+    suggested_marks: float
+    final_marks: float | None = None
+    override_reason: str = ""
+    confidence: float = Field(default=0, ge=0, le=1)
+    reason: str = ""
+    strengths: str = ""
+    improvements: str = ""
+    unchecked: bool = False
+    flags: list[str] = Field(default_factory=list)
+    feedback: str = ""
+
+
+class AnswerSheetAnalyzeResponse(BaseModel):
+    model: str
+    mode: Literal["ai", "demo"]
+    notice: str
+    final_exam_id: int
+    student_index: int
+    student_name: str
+    max_marks: float
+    suggested_marks: float
+    expected_answer: str
+    strengths: str
+    improvements: str
+    evaluations: list[AnswerEvaluationItem]
+    warnings: list[dict] = Field(default_factory=list)
+
+
+def _demo_answer_analysis(rubric: list[dict]) -> list[AnswerEvaluationItem]:
+    """Return deterministic sample data without pretending an image was assessed."""
+    items: list[AnswerEvaluationItem] = []
+    for index, question in enumerate(rubric):
+        max_marks = max(0.0, float(question.get("marks") or 0))
+        unchecked = index == len(rubric) - 1 or index % 4 == 3
+        suggested = 0.0 if unchecked else round(max_marks * (0.6 if index % 2 == 0 else 0.75), 1)
+        items.append(
+            AnswerEvaluationItem(
+                q_no=str(question.get("q_no") or index + 1),
+                question_text=str(question.get("text") or ""),
+                association="DEMO association based on the stored question number",
+                max_marks=max_marks,
+                suggested_marks=suggested,
+                final_marks=suggested,
+                confidence=0 if unchecked else 0.55,
+                reason=(
+                    "DEMO: no response was associated, so examiner review is required."
+                    if unchecked
+                    else "DEMO: illustrative score for the MVP workflow; no answer content was assessed."
+                ),
+                strengths="DEMO: shows a concise, relevant response." if not unchecked else "",
+                improvements="DEMO: add supporting steps and clearer justification.",
+                unchecked=unchecked,
+                flags=["UNCHECKED_ANSWER"] if unchecked else [],
+                feedback="DEMO result - replace with examiner judgement.",
+            )
+        )
+    return items
+
+
+class MarksSaveRequest(BaseModel):
+    final_exam_id: int
+    student_index: int = Field(ge=0)
+    student_name: str = ""
+    answer_sheet_urls: list[str] = Field(default_factory=list)
+    evaluations: list[AnswerEvaluationItem] = Field(default_factory=list)
+    awarded_marks: float
+    max_marks: float = Field(ge=0)
+    feedback: str = ""
+    updated_by: str = ""
+
+
+def _get_final_exam_row(exam_id: int) -> dict:
+    if exam_id == DEMO_EXAM_ID:
+        if not STENCIL_DEMO_MODE:
+            raise HTTPException(status_code=404, detail="Demo mode is disabled; the seeded demo examination is unavailable.")
+        exam = _demo_exam_detail()
+        return {
+            "id": exam["id"],
+            "subject_name": exam["subject_name"],
+            "question_json": exam["questions"],
+            "total_marks": exam["total_marks"],
+            "total_questions": exam["total_questions"],
+        }
+    try:
+        with psycopg.connect(EXAM_DATABASE_URL, row_factory=dict_row) as conn:
+            row = conn.execute(
+                "SELECT id, subject_name, question_json, total_marks, total_questions"
+                " FROM final_exams WHERE id = %s",
+                (exam_id,),
+            ).fetchone()
+    except psycopg.OperationalError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=f"examdb unreachable: {str(exc).strip().splitlines()[0][:200]}",
+        )
+    if row is None:
+        raise HTTPException(status_code=404, detail="exam not found")
+    return dict(row)
+
+
+def _flatten_question_marks(questions: list[dict]) -> list[dict]:
+    flattened: list[dict] = []
+
+    def walk(q: dict, parent: str = "") -> None:
+        q_no = str(q.get("q_no") or "")
+        label = q_no if not parent else f"{parent}.{q_no}" if q_no else parent
+        subs = q.get("sub_questions") or []
+        if q.get("marks") is not None or not subs:
+            try:
+                marks = float(q.get("marks") or 0)
+            except (TypeError, ValueError):
+                marks = 0.0
+            flattened.append(
+                {
+                    "q_no": label or str(len(flattened) + 1),
+                    "text": str(q.get("text") or ""),
+                    "marks": marks,
+                }
+            )
+        for sub in subs:
+            if isinstance(sub, dict):
+                walk(sub, label)
+
+    for q in questions:
+        if isinstance(q, dict):
+            walk(q)
+    return flattened
+
+
+def validate_evaluations(
+    evaluations: list[AnswerEvaluationItem], rubric: list[dict], submitted_total: float
+) -> tuple[float, list[dict]]:
+    """Validate examiner marks against the canonical rubric and recompute the total."""
+    expected = {str(item.get("q_no") or "").strip(): float(item.get("marks") or 0) for item in rubric}
+    seen: set[str] = set()
+    issues: list[dict] = []
+    total = 0.0
+    for item in evaluations:
+        q_no = item.q_no.strip()
+        if q_no in seen:
+            issues.append({"code": "DUPLICATE_QUESTION_ASSOCIATION", "severity": "error", "q_no": q_no, "message": f"Question {q_no} is associated more than once."})
+            continue
+        seen.add(q_no)
+        if q_no not in expected:
+            issues.append({"code": "UNEXPECTED_QUESTION", "severity": "error", "q_no": q_no, "message": f"Question {q_no} is not in the examination marking scheme."})
+            continue
+        canonical_max = expected[q_no]
+        final_marks = item.suggested_marks if item.final_marks is None else item.final_marks
+        if item.unchecked:
+            issues.append({"code": "UNANSWERED_QUESTION", "severity": "warning", "q_no": q_no, "message": f"Question {q_no} is marked as unanswered."})
+            if final_marks != 0:
+                issues.append({"code": "UNANSWERED_WITH_MARKS", "severity": "error", "q_no": q_no, "message": f"Unanswered question {q_no} must have 0 final marks."})
+        if final_marks < 0:
+            issues.append({"code": "NEGATIVE_MARKS", "severity": "error", "q_no": q_no, "message": f"Question {q_no} cannot have negative marks."})
+        if final_marks > canonical_max:
+            issues.append({"code": "MARKS_ABOVE_MAXIMUM", "severity": "error", "q_no": q_no, "message": f"Question {q_no} cannot exceed {canonical_max:g} marks."})
+        total += final_marks
+    for q_no in expected.keys() - seen:
+        issues.append({"code": "MISSING_EXPECTED_QUESTION", "severity": "error", "q_no": q_no, "message": f"Expected question {q_no} is missing from the evaluation."})
+    total = round(total, 4)
+    if abs(total - submitted_total) > 0.001:
+        issues.append({"code": "TOTAL_MISMATCH", "severity": "error", "q_no": "", "message": f"Submitted total {submitted_total:g} does not match backend total {total:g}."})
+    return total, issues
+
+
+@app.post("/exam/analyze-answer-sheet", response_model=AnswerSheetAnalyzeResponse)
+async def analyze_answer_sheet(body: AnswerSheetAnalyzeRequest):
+    """Use the vision model to suggest marks for uploaded answer-sheet images."""
+    import json as _json
+
+    exam = _get_final_exam_row(body.final_exam_id)
+    questions = exam.get("question_json") or []
+    max_marks = float(exam.get("total_marks") or 0)
+    rubric = _flatten_question_marks(questions)
+    if not rubric:
+        raise HTTPException(status_code=422, detail="exam has no stored questions")
+
+    if not LUNA_API_KEY and STENCIL_DEMO_MODE:
+        items = _demo_answer_analysis(rubric)
+        return AnswerSheetAnalyzeResponse(
+            model="demo",
+            mode="demo",
+            notice="Demo analysis - replace with live AI. Results are deterministic and were not derived from the uploaded answer sheet.",
+            final_exam_id=body.final_exam_id,
+            student_index=body.student_index,
+            student_name=body.student_name,
+            max_marks=max_marks,
+            suggested_marks=sum(item.suggested_marks for item in items),
+            expected_answer="DEMO only - use the stored question paper and examiner judgement.",
+            strengths="DEMO strengths are illustrative.",
+            improvements="DEMO improvements are illustrative.",
+            evaluations=items,
+            warnings=[
+                {"code": flag, "severity": "warning", "q_no": item.q_no, "message": f"Question {item.q_no} requires examiner review."}
+                for item in items
+                for flag in item.flags
+            ],
+        )
+    if not LUNA_API_KEY:
+        raise HTTPException(
+            status_code=503,
+            detail="Demo mode is disabled and AI analysis is unavailable because LUNA_API_KEY is not configured.",
+        )
+
+    prompt = (
+        "You are assisting a teacher with exam evaluation. The teacher makes the final decision.\n"
+        f"Subject: {exam.get('subject_name')}\n"
+        f"Student: {body.student_name or f'Student {body.student_index + 1}'}\n"
+        f"Maximum marks: {max_marks}\n\n"
+        "Question rubric JSON:\n"
+        f"{_json.dumps(rubric, ensure_ascii=False)}\n\n"
+        "Read the handwritten answer-sheet images. Match visible answers to the closest "
+        "question numbers. Return ONLY valid JSON with keys: expected_answer, strengths, "
+        "improvements, suggested_marks, evaluations. evaluations must be an array of "
+        "{q_no, association, suggested_marks, confidence, reason, strengths, improvements, "
+        "unchecked, feedback}. Include every rubric question. Set unchecked=true when no answer "
+        "can be associated. confidence must be between 0 and 1."
+    )
+    content = [{"type": "text", "text": prompt}]
+    content.extend({"type": "image_url", "image_url": {"url": url}} for url in body.image_urls)
+    client = get_async_openai_client()
+    try:
+        completion = await client.chat.completions.create(
+            model=LUNA_MODEL,
+            messages=[{"role": "user", "content": content}],
+            response_format={"type": "json_object"},
+        )
+        raw = (completion.choices[0].message.content or "").strip()
+        parsed = _json.loads(raw)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"answer analysis failed: {exc}")
+
+    parsed_by_q = {
+        str(item.get("q_no") or "").strip(): item
+        for item in (parsed.get("evaluations", []) or [])
+        if isinstance(item, dict)
+    }
+    items: list[AnswerEvaluationItem] = []
+    for rubric_item in rubric:
+        q_no = str(rubric_item.get("q_no") or "").strip()
+        item = parsed_by_q.get(q_no, {})
+        try:
+            item_max = max(0.0, float(rubric_item.get("marks") or 0))
+            raw_suggested = float(item.get("suggested_marks") or 0)
+            confidence = max(0.0, min(1.0, float(item.get("confidence") or 0)))
+        except (TypeError, ValueError):
+            item_max, raw_suggested, confidence = 0.0, 0.0, 0.0
+        unchecked = bool(item.get("unchecked", not item))
+        flags: list[str] = []
+        if unchecked:
+            flags.append("UNCHECKED_ANSWER")
+        if raw_suggested > item_max:
+            flags.append("MARKS_ABOVE_MAXIMUM")
+        suggested = max(0.0, min(item_max, raw_suggested))
+        items.append(
+            AnswerEvaluationItem(
+                q_no=q_no,
+                question_text=str(rubric_item.get("text") or ""),
+                association=str(item.get("association") or ""),
+                max_marks=item_max,
+                suggested_marks=suggested,
+                final_marks=suggested,
+                confidence=confidence,
+                reason=str(item.get("reason") or ""),
+                strengths=str(item.get("strengths") or ""),
+                improvements=str(item.get("improvements") or ""),
+                unchecked=unchecked,
+                flags=flags,
+                feedback=str(item.get("feedback") or ""),
+            )
+        )
+    suggested_total = sum(i.suggested_marks for i in items)
+    if not items:
+        suggested_total = max(0.0, min(max_marks, float(parsed.get("suggested_marks") or 0)))
+    return AnswerSheetAnalyzeResponse(
+        model=LUNA_MODEL,
+        mode="ai",
+        notice="AI-assisted analysis. Examiner review is required before saving final marks.",
+        final_exam_id=body.final_exam_id,
+        student_index=body.student_index,
+        student_name=body.student_name,
+        max_marks=max_marks,
+        suggested_marks=max(0.0, min(max_marks, suggested_total)),
+        expected_answer=str(parsed.get("expected_answer") or ""),
+        strengths=str(parsed.get("strengths") or ""),
+        improvements=str(parsed.get("improvements") or ""),
+        evaluations=items,
+        warnings=[
+            {"code": flag, "severity": "warning", "q_no": item.q_no, "message": f"Question {item.q_no} requires examiner review."}
+            for item in items
+            for flag in item.flags
+        ],
+    )
+
+
+@app.get("/exam/marks")
+async def get_student_marks(final_exam_id: int, student_index: int):
+    if final_exam_id == DEMO_EXAM_ID:
+        if not STENCIL_DEMO_MODE:
+            raise HTTPException(status_code=404, detail="Demo mode is disabled; demo marks are unavailable.")
+        return {"mark": DEMO_MARKS.get((final_exam_id, student_index))}
+    try:
+        with psycopg.connect(EXAM_DATABASE_URL, row_factory=dict_row) as conn:
+            row = conn.execute(
+                "SELECT * FROM student_marks WHERE final_exam_id=%s AND student_index=%s",
+                (final_exam_id, student_index),
+            ).fetchone()
+    except psycopg.OperationalError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=f"examdb unreachable: {str(exc).strip().splitlines()[0][:200]}",
+        )
+    if row is None:
+        return {"mark": None}
+    d = dict(row)
+    d["created_at"] = str(d["created_at"])
+    d["updated_at"] = str(d["updated_at"])
+    return {"mark": d}
+
+
+@app.put("/exam/marks")
+async def save_student_marks(body: MarksSaveRequest):
+    """Persist final teacher-approved marks for one student/exam pair."""
+    import json as _json
+
+    exam = _get_final_exam_row(body.final_exam_id)
+    exam_max = float(exam.get("total_marks") or body.max_marks or 0)
+    max_marks = float(body.max_marks or exam_max)
+    if max_marks != exam_max:
+        raise HTTPException(status_code=422, detail=f"maximum marks must equal exam maximum ({exam_max:g})")
+    rubric = _flatten_question_marks(exam.get("question_json") or [])
+    awarded, validation_issues = validate_evaluations(
+        body.evaluations, rubric, float(body.awarded_marks)
+    )
+    errors = [item for item in validation_issues if item["severity"] == "error"]
+    if errors:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "message": "Final marks were not saved because validation failed.",
+                "computed_total": awarded,
+                "issues": validation_issues,
+            },
+        )
+    if body.final_exam_id == DEMO_EXAM_ID:
+        if not STENCIL_DEMO_MODE:
+            raise HTTPException(status_code=404, detail="Demo mode is disabled; demo marks cannot be saved.")
+        now = datetime.now(timezone.utc).isoformat()
+        previous = DEMO_MARKS.get((body.final_exam_id, body.student_index))
+        row = {
+            "id": body.student_index + 1,
+            "final_exam_id": body.final_exam_id,
+            "student_index": body.student_index,
+            "student_name": body.student_name.strip(),
+            "answer_sheet_urls": body.answer_sheet_urls,
+            "evaluations_json": [item.model_dump() for item in body.evaluations],
+            "awarded_marks": awarded,
+            "max_marks": max_marks,
+            "feedback": body.feedback.strip(),
+            "updated_by": body.updated_by.strip() or "Demo Teacher",
+            "moderation_status": "pending",
+            "created_at": previous["created_at"] if previous else now,
+            "updated_at": now,
+            "validation_warnings": validation_issues,
+            "demo": True,
+        }
+        DEMO_MARKS[(body.final_exam_id, body.student_index)] = row
+        return {"mark": row}
+    evaluations_json = _json.dumps([e.model_dump() for e in body.evaluations])
+    urls_json = _json.dumps(body.answer_sheet_urls)
+    try:
+        with psycopg.connect(EXAM_DATABASE_URL, row_factory=dict_row) as conn:
+            row = conn.execute(
+                """
+                INSERT INTO student_marks (
+                    final_exam_id, student_index, student_name, answer_sheet_urls,
+                    evaluations_json, awarded_marks, max_marks, feedback, updated_by
+                )
+                VALUES (%s,%s,%s,%s::jsonb,%s::jsonb,%s,%s,%s,%s)
+                ON CONFLICT (final_exam_id, student_index) DO UPDATE SET
+                    student_name = EXCLUDED.student_name,
+                    answer_sheet_urls = EXCLUDED.answer_sheet_urls,
+                    evaluations_json = EXCLUDED.evaluations_json,
+                    awarded_marks = EXCLUDED.awarded_marks,
+                    max_marks = EXCLUDED.max_marks,
+                    feedback = EXCLUDED.feedback,
+                    updated_by = EXCLUDED.updated_by,
+                    moderation_status = 'pending',
+                    updated_at = now()
+                RETURNING *
+                """,
+                (
+                    body.final_exam_id,
+                    body.student_index,
+                    body.student_name.strip(),
+                    urls_json,
+                    evaluations_json,
+                    awarded,
+                    max_marks,
+                    body.feedback.strip(),
+                    body.updated_by.strip(),
+                ),
+            ).fetchone()
+    except psycopg.OperationalError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=f"examdb unreachable: {str(exc).strip().splitlines()[0][:200]}",
+        )
+    d = dict(row)
+    d["created_at"] = str(d["created_at"])
+    d["updated_at"] = str(d["updated_at"])
+    d["validation_warnings"] = validation_issues
+    return {"mark": d}
+
+
+@app.get("/exam/marks/progress")
+async def get_marks_progress(final_exam_id: int):
+    if final_exam_id == DEMO_EXAM_ID:
+        if not STENCIL_DEMO_MODE:
+            raise HTTPException(status_code=404, detail="Demo mode is disabled; demo progress is unavailable.")
+        evaluated = sum(1 for exam_id, _ in DEMO_MARKS if exam_id == final_exam_id)
+        total = len(DEMO_STUDENTS)
+        return {
+            "total_students": total,
+            "evaluated_students": evaluated,
+            "remaining_students": total - evaluated,
+            "percent": round((evaluated / total) * 100, 1),
+            "demo": True,
+        }
+    try:
+        with psycopg.connect(EXAM_DATABASE_URL, row_factory=dict_row) as conn:
+            row = conn.execute(
+                """
+                SELECT f.id, COALESCE(d.row_count, 0) AS total_students,
+                       COUNT(m.id) AS evaluated_students
+                FROM final_exams f
+                LEFT JOIN student_datasets d ON d.id = f.student_dataset_id
+                LEFT JOIN student_marks m ON m.final_exam_id = f.id
+                WHERE f.id = %s
+                GROUP BY f.id, d.row_count
+                """,
+                (final_exam_id,),
+            ).fetchone()
+    except psycopg.OperationalError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=f"examdb unreachable: {str(exc).strip().splitlines()[0][:200]}",
+        )
+    if row is None:
+        raise HTTPException(status_code=404, detail="exam not found")
+    total = int(row["total_students"] or 0)
+    evaluated = int(row["evaluated_students"] or 0)
+    return {
+        "total_students": total,
+        "evaluated_students": evaluated,
+        "remaining_students": max(0, total - evaluated),
+        "percent": round((evaluated / total) * 100, 1) if total else 0,
+    }
+
+
+def _seed_demo_dashboard_marks() -> None:
+    now = datetime.now(timezone.utc).isoformat()
+    samples = [
+        (0, "Aarav Sharma", [2, 3, 5], [5, 5, 8]),
+        (1, "Diya Patel", [2, 3, 5], [0, 0, 0]),
+    ]
+    for student_index, student_name, suggested, final in samples:
+        if (DEMO_EXAM_ID, student_index) in DEMO_MARKS:
+            continue
+        evaluations = []
+        for question, suggested_marks, final_marks in zip(DEMO_QUESTIONS, suggested, final):
+            evaluations.append(
+                {
+                    "q_no": question["q_no"],
+                    "question_text": question["text"],
+                    "association": "Seeded demo association",
+                    "max_marks": question["marks"],
+                    "suggested_marks": suggested_marks,
+                    "final_marks": final_marks,
+                    "override_reason": "Examiner review of the written working" if final_marks != suggested_marks else "",
+                    "confidence": 0.65,
+                    "reason": "Seeded demonstration result",
+                    "strengths": "",
+                    "improvements": "",
+                    "unchecked": False,
+                    "flags": [],
+                    "feedback": "Seeded demo evaluation",
+                }
+            )
+        DEMO_MARKS[(DEMO_EXAM_ID, student_index)] = {
+            "id": student_index + 1,
+            "final_exam_id": DEMO_EXAM_ID,
+            "student_index": student_index,
+            "student_name": student_name,
+            "answer_sheet_urls": [],
+            "evaluations_json": evaluations,
+            "awarded_marks": float(sum(final)),
+            "max_marks": 20.0,
+            "feedback": "Seeded demo evaluation",
+            "updated_by": "Demo Teacher",
+            "moderation_status": "pending",
+            "created_at": now,
+            "updated_at": now,
+            "demo": True,
+        }
+
+
+def _build_dashboard(rows: list[dict], assigned_by_examiner: dict[str, int]) -> dict:
+    repeated: dict[tuple[str, str], int] = {}
+    for row in rows:
+        examiner = str(row.get("updated_by") or row.get("assigned_teacher") or "Unassigned")
+        awarded = float(row.get("awarded_marks") or 0)
+        maximum = float(row.get("max_marks") or 0)
+        if awarded == 0:
+            repeated[(examiner, "zero")] = repeated.get((examiner, "zero"), 0) + 1
+        if maximum > 0 and awarded == maximum:
+            repeated[(examiner, "full")] = repeated.get((examiner, "full"), 0) + 1
+
+    moderation: list[dict] = []
+    completed_by_examiner: dict[str, int] = {}
+    for row in rows:
+        examiner = str(row.get("updated_by") or row.get("assigned_teacher") or "Unassigned")
+        completed_by_examiner[examiner] = completed_by_examiner.get(examiner, 0) + 1
+        awarded = float(row.get("awarded_marks") or 0)
+        maximum = float(row.get("max_marks") or 0)
+        evaluations = row.get("evaluations_json") or []
+        flags: list[dict] = []
+
+        def add_flag(code: str, message: str) -> None:
+            if not any(item["code"] == code for item in flags):
+                flags.append({"code": code, "message": message})
+
+        ratio = awarded / maximum if maximum else 0
+        if maximum and ratio >= 0.9:
+            add_flag("UNUSUALLY_HIGH_SCORE", "Score is at least 90% of the marking scheme maximum.")
+        if maximum and ratio <= 0.2:
+            add_flag("UNUSUALLY_LOW_SCORE", "Score is at most 20% of the marking scheme maximum.")
+
+        suggested_total = 0.0
+        override_count = 0
+        for item in evaluations:
+            suggested = float(item.get("suggested_marks") or 0)
+            final_marks = float(item.get("final_marks") if item.get("final_marks") is not None else suggested)
+            suggested_total += suggested
+            if abs(final_marks - suggested) > 0.001:
+                override_count += 1
+            if item.get("unchecked"):
+                add_flag("UNANSWERED_QUESTION", "At least one expected answer is marked unanswered.")
+            for code in item.get("flags") or []:
+                add_flag(str(code), "The evaluation contains a validation warning requiring review.")
+        if maximum and abs(awarded - suggested_total) >= max(3.0, maximum * 0.25):
+            add_flag("LARGE_AI_EXAMINER_DIFFERENCE", "Examiner total differs substantially from the AI suggestion.")
+        if override_count >= max(2, (len(evaluations) + 1) // 2):
+            add_flag("HIGH_OVERRIDE_COUNT", "Final marks override the suggestion on many questions.")
+        if repeated.get((examiner, "full"), 0) >= 3 and awarded == maximum:
+            add_flag("REPEATED_FULL_MARKS", "This examiner has awarded full marks on at least three scripts.")
+        if repeated.get((examiner, "zero"), 0) >= 3 and awarded == 0:
+            add_flag("REPEATED_ZERO_MARKS", "This examiner has awarded zero marks on at least three scripts.")
+
+        moderation.append(
+            {
+                "final_exam_id": int(row["final_exam_id"]),
+                "student_index": int(row["student_index"]),
+                "student_session_id": f"{row['final_exam_id']}-{int(row['student_index']) + 1}",
+                "student_name": str(row.get("student_name") or ""),
+                "subject_name": str(row.get("subject_name") or ""),
+                "final_marks": awarded,
+                "maximum_marks": maximum,
+                "warning_types": [item["code"] for item in flags],
+                "warning_details": flags,
+                "examiner": examiner,
+                "status": str(row.get("moderation_status") or "pending"),
+                "override_count": override_count,
+                "updated_at": str(row.get("updated_at") or ""),
+            }
+        )
+
+    total_assigned = sum(assigned_by_examiner.values())
+    completed = len(rows)
+    warning_count = sum(1 for row in moderation if row["warning_types"])
+    needs_review = sum(
+        1 for row in moderation if row["warning_types"] and row["status"] != "resolved"
+    )
+    examiners = sorted(set(assigned_by_examiner) | set(completed_by_examiner))
+    return {
+        "summary": {
+            "total_assigned_students": total_assigned,
+            "completed_evaluations": completed,
+            "pending_evaluations": max(0, total_assigned - completed),
+            "evaluations_with_warnings": warning_count,
+            "average_awarded_marks": round(sum(row["final_marks"] for row in moderation) / completed, 2) if completed else 0,
+            "scripts_needing_review": needs_review,
+        },
+        "examiner_progress": [
+            {
+                "examiner": examiner,
+                "assigned": assigned_by_examiner.get(examiner, 0),
+                "completed": completed_by_examiner.get(examiner, 0),
+                "pending": max(0, assigned_by_examiner.get(examiner, 0) - completed_by_examiner.get(examiner, 0)),
+                "percent": round((completed_by_examiner.get(examiner, 0) / assigned_by_examiner[examiner]) * 100, 1) if assigned_by_examiner.get(examiner, 0) else 0,
+            }
+            for examiner in examiners
+        ],
+        "moderation": sorted(moderation, key=lambda row: (not bool(row["warning_types"]), row["status"], row["student_session_id"])),
+        "notice": "Flags are explainable routing signals for human review only. They do not accuse or penalize an examiner.",
+    }
+
+
+def _build_demo_report() -> dict:
+    """Summarize only persisted or directly observable demo evidence."""
+    _seed_demo_dashboard_marks()
+    rows = [
+        row
+        for (exam_id, _), row in DEMO_MARKS.items()
+        if exam_id == DEMO_EXAM_ID
+    ]
+    upload_files = [
+        path
+        for path in DEMO_UPLOAD_DIR.iterdir()
+        if path.is_file() and path.suffix.lower() in ALLOWED_EXTS
+    ]
+    expected_questions = {str(question["q_no"]) for question in DEMO_QUESTIONS}
+    expected_associations = len(rows) * len(expected_questions)
+    associated_answers = 0
+    warning_codes: list[str] = []
+    override_count = 0
+
+    for row in rows:
+        for item in row.get("evaluations_json") or []:
+            q_no = str(item.get("q_no") or "").strip()
+            if q_no in expected_questions and str(item.get("association") or "").strip():
+                associated_answers += 1
+            suggested = float(item.get("suggested_marks") or 0)
+            final_marks = float(
+                item.get("final_marks")
+                if item.get("final_marks") is not None
+                else suggested
+            )
+            if abs(final_marks - suggested) > 0.001:
+                override_count += 1
+            warning_codes.extend(str(code) for code in item.get("flags") or [])
+        warning_codes.extend(
+            str(item.get("code") or "UNKNOWN_WARNING")
+            for item in row.get("validation_warnings") or []
+        )
+
+    dashboard_rows = []
+    for row in rows:
+        item = dict(row)
+        item["subject_name"] = _demo_exam_detail()["subject_name"]
+        item["assigned_teacher"] = "Demo Teacher"
+        dashboard_rows.append(item)
+    dashboard = _build_dashboard(
+        dashboard_rows, {"Demo Teacher": len(DEMO_STUDENTS)}
+    )
+
+    return {
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "scope": "Current local demo data",
+        "metrics": {
+            "test_pages": {
+                "value": len(upload_files),
+                "display": str(len(upload_files)),
+                "note": "Answer-sheet image pages currently stored in the local demo upload directory.",
+            },
+            "successful_captures": {
+                "value": len(upload_files),
+                "display": str(len(upload_files)),
+                "note": "Browser captures/uploads accepted and stored by the demo API.",
+            },
+            "rejected_images": {
+                "value": None,
+                "display": "not measured",
+                "note": "Rejected browser selections are not persisted by the current MVP.",
+            },
+            "question_matching": {
+                "value": associated_answers,
+                "display": f"{associated_answers} / {expected_associations}",
+                "note": "Saved question associations. Ground-truth matching accuracy is not measured.",
+            },
+            "validation_warnings": {
+                "value": len(warning_codes),
+                "display": str(len(warning_codes)),
+                "note": "Validation warning instances stored with saved evaluations.",
+            },
+            "saved_evaluations": {
+                "value": len(rows),
+                "display": str(len(rows)),
+                "note": "Student evaluations currently saved in demo memory.",
+            },
+        },
+        "sequence": [
+            {
+                "key": "upload",
+                "label": "Upload image",
+                "status": "complete" if upload_files else "ready",
+                "detail": f"{len(upload_files)} locally stored answer-sheet page(s).",
+            },
+            {
+                "key": "quality",
+                "label": "Quality warning or pass",
+                "status": "available",
+                "detail": "Explainable blur, contrast, crop, file type, and empty-file checks run before upload.",
+            },
+            {
+                "key": "matching",
+                "label": "Question matching",
+                "status": "complete" if associated_answers else "ready",
+                "detail": f"{associated_answers} of {expected_associations} saved question associations are populated.",
+            },
+            {
+                "key": "suggestion",
+                "label": "AI/demo suggestion",
+                "status": "live_ai" if LUNA_API_KEY else "demo",
+                "detail": "Live AI is configured." if LUNA_API_KEY else "Demo analysis - replace with live AI.",
+            },
+            {
+                "key": "override",
+                "label": "Examiner override",
+                "status": "complete" if override_count else "ready",
+                "detail": f"{override_count} saved question mark override(s).",
+            },
+            {
+                "key": "save",
+                "label": "Saved final marks",
+                "status": "complete" if rows else "ready",
+                "detail": f"{len(rows)} saved student evaluation(s).",
+            },
+            {
+                "key": "dashboard",
+                "label": "Dashboard update",
+                "status": "complete" if dashboard["summary"]["completed_evaluations"] else "ready",
+                "detail": f"Dashboard reports {dashboard['summary']['completed_evaluations']} completed evaluation(s).",
+            },
+        ],
+        "dashboard": dashboard,
+        "measurement_notes": [
+            "No latency, throughput, model accuracy, or rejection-rate claim is made.",
+            "Demo records are local evidence and are not production records.",
+        ],
+    }
+
+
+@app.get("/exam/dashboard")
+async def get_evaluation_dashboard(teacher: str = ""):
+    teacher = teacher.strip()
+    if STENCIL_DEMO_MODE and (not teacher or teacher == "Demo Teacher"):
+        _seed_demo_dashboard_marks()
+        rows = []
+        for row in DEMO_MARKS.values():
+            item = dict(row)
+            item["subject_name"] = _demo_exam_detail()["subject_name"]
+            item["assigned_teacher"] = "Demo Teacher"
+            rows.append(item)
+        return _build_dashboard(rows, {"Demo Teacher": len(DEMO_STUDENTS)})
+
+    where = " WHERE f.assigned_teacher = %s" if teacher else ""
+    params = (teacher,) if teacher else ()
+    try:
+        with psycopg.connect(EXAM_DATABASE_URL, row_factory=dict_row) as conn:
+            mark_rows = conn.execute(
+                "SELECT m.*, f.subject_name, f.assigned_teacher FROM student_marks m "
+                "JOIN final_exams f ON f.id = m.final_exam_id" + where,
+                params,
+            ).fetchall()
+            assigned_rows = conn.execute(
+                "SELECT f.assigned_teacher, SUM(COALESCE(d.row_count, 0)) AS assigned "
+                "FROM final_exams f LEFT JOIN student_datasets d ON d.id = f.student_dataset_id"
+                + where
+                + " GROUP BY f.assigned_teacher",
+                params,
+            ).fetchall()
+    except psycopg.OperationalError as exc:
+        raise HTTPException(status_code=503, detail=f"Demo mode is disabled and dashboard data is unavailable: {str(exc).strip().splitlines()[0][:200]}")
+    return _build_dashboard(
+        [dict(row) for row in mark_rows],
+        {str(row["assigned_teacher"] or "Unassigned"): int(row["assigned"] or 0) for row in assigned_rows},
+    )
+
+
+@app.get("/demo/report")
+async def get_demo_report():
+    """Presentation-ready evidence from the current demo process and local uploads."""
+    if not STENCIL_DEMO_MODE:
+        raise HTTPException(
+            status_code=404,
+            detail="Demo mode is disabled; no demo report is available.",
+        )
+    return _build_demo_report()
+
+
+class ModerationStatusRequest(BaseModel):
+    status: Literal["pending", "reviewed", "resolved"]
+
+
+@app.patch("/exam/moderation/{final_exam_id}/{student_index}")
+async def update_moderation_status(
+    final_exam_id: int, student_index: int, body: ModerationStatusRequest
+):
+    if final_exam_id == DEMO_EXAM_ID:
+        if not STENCIL_DEMO_MODE:
+            raise HTTPException(status_code=404, detail="Demo mode is disabled; demo moderation is unavailable.")
+        _seed_demo_dashboard_marks()
+        row = DEMO_MARKS.get((final_exam_id, student_index))
+        if row is None:
+            raise HTTPException(status_code=404, detail="evaluation not found")
+        row["moderation_status"] = body.status
+        row["updated_at"] = datetime.now(timezone.utc).isoformat()
+        return {"status": body.status}
+    try:
+        with psycopg.connect(EXAM_DATABASE_URL, row_factory=dict_row) as conn:
+            row = conn.execute(
+                "UPDATE student_marks SET moderation_status=%s, updated_at=now() "
+                "WHERE final_exam_id=%s AND student_index=%s RETURNING id",
+                (body.status, final_exam_id, student_index),
+            ).fetchone()
+    except psycopg.OperationalError as exc:
+        raise HTTPException(status_code=503, detail=f"moderation database unavailable: {str(exc).strip().splitlines()[0][:200]}")
+    if row is None:
+        raise HTTPException(status_code=404, detail="evaluation not found")
+    return {"status": body.status}
 
 
 class StudentUploadResponse(BaseModel):
@@ -1222,6 +2268,8 @@ async def upload_student_csv(
 @app.get("/exam/students")
 async def list_student_datasets():
     """List saved student CSV uploads (newest first)."""
+    if STENCIL_DEMO_MODE:
+        return {"datasets": [_demo_dataset()]}
     try:
         with psycopg.connect(EXAM_DATABASE_URL, row_factory=dict_row) as conn:
             rows = conn.execute(
@@ -1244,6 +2292,10 @@ async def list_student_datasets():
 
 
 def _get_dataset_or_404(dataset_id: int) -> dict:
+    if dataset_id == DEMO_DATASET_ID:
+        if not STENCIL_DEMO_MODE:
+            raise HTTPException(status_code=404, detail="Demo mode is disabled; the seeded student dataset is unavailable.")
+        return _demo_dataset()
     try:
         with psycopg.connect(EXAM_DATABASE_URL, row_factory=dict_row) as conn:
             row = conn.execute(
@@ -1324,6 +2376,17 @@ async def update_student_dataset(dataset_id: int, body: StudentUpdateRequest):
 @app.get("/exam/students/{dataset_id}/rows")
 async def get_student_rows(dataset_id: int, limit: int = 2000):
     """Return ALL data rows of a dataset (re-read from S3, fallback to preview)."""
+    if dataset_id == DEMO_DATASET_ID:
+        if not STENCIL_DEMO_MODE:
+            raise HTTPException(status_code=404, detail="Demo mode is disabled; seeded students are unavailable.")
+        rows = DEMO_STUDENTS[: max(1, min(limit, 5000))]
+        return {
+            "columns": _demo_dataset()["columns"],
+            "rows": rows,
+            "total": len(DEMO_STUDENTS),
+            "truncated": len(rows) < len(DEMO_STUDENTS),
+            "demo": True,
+        }
     ds = _get_dataset_or_404(dataset_id)
     s3_key = ds.get("s3_key") or ""
     limit = max(1, min(limit, 5000))

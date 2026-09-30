@@ -1,0 +1,55 @@
+services:
+  - type: web
+    name: stencil-web
+    runtime: docker
+    plan: free
+    dockerfilePath: ./apps/gateway/Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    envVars:
+      - key: AUTH_SERVICE_URL
+        fromService:
+          name: stencil-auth
+          type: web
+          property: hostport
+      - key: EXAM_API_URL
+        fromService:
+          name: stencil-api
+          type: web
+          property: hostport
+
+  - type: web
+    name: stencil-api
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    envVars:
+      - key: EXAM_DATABASE_URL
+        fromDatabase:
+          name: stencil-db
+          property: connectionString
+      - key: STENCIL_DEMO_MODE
+        value: "true"
+
+  - type: web
+    name: stencil-auth
+    runtime: docker
+    plan: free
+    dockerfilePath: ./apps/auth-service/Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    envVars:
+      - key: AUTH_DATABASE_URL
+        fromDatabase:
+          name: stencil-db
+          property: connectionString
+      - key: AUTH_JWT_SECRET
+        generateValue: true
+
+databases:
+  - name: stencil-db
+    plan: free
+    databaseName: stencil
+    user: stencil

@@ -1,13 +1,14 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { AnimatePresence, motion } from "motion/react";
+import { ArrowLeft, KeyRound } from "lucide-react";
 import { AuthLayout } from "@/components/AuthLayout";
 import { Button } from "@/components/ui/button";
-import { Kbd } from "@/components/ui/kbd";
 import { coordinatorLogin, fetchSeededCoordinators } from "@/lib/auth";
+import { fetchStencilStatus } from "@/lib/exam";
 
 const inputCls =
-  "h-9 rounded-md border border-input bg-transparent px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring";
+  "w-full";
 
 export function CoordinatorLoginPage({ onLogin }: { onLogin: () => void }) {
   const navigate = useNavigate();
@@ -16,9 +17,13 @@ export function CoordinatorLoginPage({ onLogin }: { onLogin: () => void }) {
   const [ids, setIds] = useState<{ coordinator_id: string; college: string }[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [demoMode, setDemoMode] = useState(false);
 
   useEffect(() => {
     fetchSeededCoordinators().then(setIds).catch(() => {});
+    fetchStencilStatus()
+      .then((status) => setDemoMode(status.demo_mode))
+      .catch(() => setDemoMode(false));
   }, []);
 
   // Backspace goes back (ignored while typing in a field).
@@ -66,9 +71,38 @@ export function CoordinatorLoginPage({ onLogin }: { onLogin: () => void }) {
       description="Coordinators are pre-seeded per college — there is no coordinator registration."
     >
       <form onSubmit={submit} className="flex flex-col gap-4">
+        {demoMode && (
+          <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-amber-950">
+            <div className="flex items-start gap-2">
+              <KeyRound className="mt-0.5 size-4 shrink-0" />
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold">Demo access</p>
+                <p className="mt-1 text-xs leading-5">
+                  Coordinator ID: <code className="font-semibold">coord_rgpv</code><br />
+                  Password: <code className="font-semibold">coord123</code>
+                </p>
+                <button
+                  type="button"
+                  className="mt-2 text-xs font-semibold underline underline-offset-2"
+                  onClick={() => {
+                    setCoordinatorId("coord_rgpv");
+                    setPassword("coord123");
+                    setError(null);
+                  }}
+                >
+                  Use demo credentials
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
         <label className="flex flex-col gap-1.5">
           <span className="text-sm font-medium">Coordinator ID</span>
           <input
+            name="coordinator_id"
+            autoComplete="username"
+            required
+            aria-invalid={Boolean(error)}
             value={coordinatorId}
             onChange={(e) => setCoordinatorId(e.target.value)}
             placeholder="e.g. coord_rgpv"
@@ -87,6 +121,10 @@ export function CoordinatorLoginPage({ onLogin }: { onLogin: () => void }) {
           <span className="text-sm font-medium">Password</span>
           <input
             type="password"
+            name="password"
+            autoComplete="current-password"
+            required
+            aria-invalid={Boolean(error)}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             placeholder="••••••••"
@@ -101,7 +139,7 @@ export function CoordinatorLoginPage({ onLogin }: { onLogin: () => void }) {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.2 }}
-              className="text-sm text-destructive"
+              className="notice-error"
             >
               {error}
             </motion.p>
@@ -114,19 +152,12 @@ export function CoordinatorLoginPage({ onLogin }: { onLogin: () => void }) {
             onClick={() => navigate("/", { state: { dir: -1 } })}
             className="cursor-pointer"
           >
-            ← Back
-            <Kbd>Bck</Kbd>
+            <ArrowLeft /> Back
           </Button>
           <Button type="submit" disabled={loading} className="cursor-pointer">
             {loading ? "Logging in…" : "Login"}
-            <Kbd className="h-4 border-primary-foreground/30 bg-primary-foreground/10 px-1 text-[9px] text-primary-foreground">
-              Enter
-            </Kbd>
           </Button>
         </div>
-        <p className="text-xs text-muted-foreground">
-          Demo IDs: coord_rgpv / coord_davv / coord_manit (password: coord123).
-        </p>
       </form>
     </AuthLayout>
   );

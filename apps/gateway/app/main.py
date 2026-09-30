@@ -23,14 +23,23 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 
 _HERE = Path(__file__).resolve()
 load_dotenv(_HERE.parents[1] / ".env", override=False)
 load_dotenv(_HERE.parents[3] / ".env", override=False)
 
-AUTH_SERVICE_URL = os.getenv("AUTH_SERVICE_URL", "http://localhost:8002").rstrip("/")
-EXAM_API_URL = os.getenv("EXAM_API_URL", "http://localhost:8001").rstrip("/")
-SCANNER_URL = os.getenv("SCANNER_URL", "http://localhost:8000").rstrip("/")
+def _service_url(name: str, default: str) -> str:
+    value = os.getenv(name, default).strip().rstrip("/")
+    if "://" not in value:
+        value = f"http://{value}"
+    return value
+
+
+AUTH_SERVICE_URL = _service_url("AUTH_SERVICE_URL", "http://localhost:8002")
+EXAM_API_URL = _service_url("EXAM_API_URL", "http://localhost:8001")
+SCANNER_URL = _service_url("SCANNER_URL", "http://localhost:8000")
+WEB_DIST = Path(os.getenv("STENCIL_WEB_DIST", "")).resolve()
 
 HOP_BY_HOP = {
     "connection", "keep-alive", "proxy-authenticate", "proxy-authorization",
@@ -48,7 +57,7 @@ app.add_middleware(
 )
 
 
-@app.get("/")
+@app.get("/api")
 async def root():
     return {
         "service": "mponline-gateway",
@@ -71,9 +80,18 @@ async def health():
         except Exception as exc:
             return {"url": url, "ok": False, "error": str(exc)[:200]}
 
-    auth, exam, scanner = await _gather(check(AUTH_SERVICE_URL), check(EXAM_API_URL), check(SCANNER_URL))
-    all_ok = all(s.get("ok") for s in (auth, exam, scanner))
-    return {"status": "ok" if all_ok else "degraded", "auth": auth, "exam": exam, "scanner": scanner}
+    auth, exam = await _gather(check(AUTH_SERVICE_URL), check(EXAM_API_URL))
+    all_ok = all(service.get("ok") for service in (auth, exam))
+    return {
+        "status": "ok" if all_ok else "degraded",
+        "auth": auth,
+        "exam": exam,
+        "scanner": {
+            "ok": None,
+            "mode": "local_companion",
+            "detail": "Checked by the examiner browser on 127.0.0.1, not by Render.",
+        },
+    }
 
 
 async def _gather(*coros):
@@ -134,6 +152,21 @@ async def proxy_config(request: Request):
     return await _proxy(request, EXAM_API_URL, "/config")
 
 
+@app.api_route("/status", methods=["GET", "OPTIONS"])
+async def proxy_status(request: Request):
+    return await _proxy(request, EXAM_API_URL, "/status")
+
+
+@app.api_route("/demo/report", methods=["GET", "OPTIONS"])
+async def proxy_demo_report(request: Request):
+    return await _proxy(request, EXAM_API_URL, "/demo/report")
+
+
+@app.api_route("/demo-uploads/{path:path}", methods=["GET", "HEAD", "OPTIONS"])
+async def proxy_demo_upload(path: str, request: Request):
+    return await _proxy(request, EXAM_API_URL, f"/demo-uploads/{path}")
+
+
 # ---- scanner ----
 @app.api_route("/scanner/{path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"])
 async def proxy_scanner(path: str, request: Request):
@@ -156,3 +189,9 @@ async def proxy_scanner(path: str, request: Request):
 
         return StreamingResponse(gen(), media_type="multipart/x-mixed-replace; boundary=frame")
     return await _proxy(request, SCANNER_URL, f"/{path}")
+
+
+# The production gateway owns the public origin and serves the Vite build.
+# HashRouter keeps browser navigation compatible with static hosting.
+if (WEB_DIST / "index.html").is_file():
+    app.mount("/", StaticFiles(directory=WEB_DIST, html=True), name="web")

@@ -4,8 +4,8 @@ import { AnimatePresence, motion } from "motion/react";
 import { TitleBar } from "@/components/TitleBar";
 import { AuthHeader } from "@/components/AuthLayout";
 import { AppSidebar } from "@/components/AppSidebar";
+import { WorkspaceHeader } from "@/components/WorkspaceHeader";
 import { SidebarProvider } from "@/components/ui/sidebar";
-import { HomePage } from "@/pages/HomePage";
 import { ScannerPage } from "@/pages/ScannerPage";
 import { ExamPage } from "@/pages/ExamPage";
 import { OnboardingPage } from "@/pages/OnboardingPage";
@@ -20,6 +20,8 @@ import { TeacherDashboardPage } from "@/pages/TeacherDashboardPage";
 import { CheckExamsPage } from "@/pages/CheckExamsPage";
 import { CheckExamDetailPage } from "@/pages/CheckExamDetailPage";
 import { CheckPaperPage } from "@/pages/CheckPaperPage";
+import { PresentationStatusPage } from "@/pages/PresentationStatusPage";
+import { DesktopDownloadPage } from "@/pages/DesktopDownloadPage";
 import { clearSession, loadSession, type Session } from "@/lib/auth";
 
 function AuthedShell({
@@ -30,22 +32,32 @@ function AuthedShell({
   onLogout: () => void;
 }) {
   const role = session.user.role;
+  const demoMode = session.user.status === "demo";
   return (
     <div className="flex h-screen w-full flex-col overflow-hidden bg-background text-foreground">
       <TitleBar />
+      {demoMode && (
+        <div className="border-b border-amber-300 bg-amber-50 px-4 py-2 text-center text-xs font-semibold text-amber-950">
+          Demo mode: local seeded data and clearly labelled demo analysis. No production records are changed.
+        </div>
+      )}
       <div className="flex min-h-0 flex-1">
         <AppSidebar session={session} onLogout={onLogout} />
-        <div className="flex min-w-0 flex-1 flex-col overflow-y-auto">
+        <div className="flex min-w-0 flex-1 flex-col bg-background">
+          <WorkspaceHeader session={session} onLogout={onLogout} />
+          <div className="app-content min-h-0 flex-1 overflow-y-auto">
           <Routes>
               {role === "coordinator" ? (
                 <>
                   <Route path="/" element={<CoordinatorDashboardPage session={session} />} />
-                  <Route path="/home" element={<HomePage />} />
+                  <Route path="/home" element={<Navigate to="/" replace />} />
                   <Route path="/exam" element={<ExamPage session={session} />} />
                   <Route path="/teachers" element={<TeachersPage session={session} />} />
                   <Route path="/students" element={<StudentsPage />} />
                   <Route path="/students/new" element={<StudentsUploadPage session={session} />} />
                   <Route path="/students/:id" element={<StudentsDetailPage />} />
+                  <Route path="/status" element={<PresentationStatusPage />} />
+                  <Route path="/download" element={<DesktopDownloadPage />} />
                   <Route path="/scanner" element={<Navigate to="/" replace />} />
                   <Route path="/teacher" element={<Navigate to="/" replace />} />
                   <Route path="*" element={<Navigate to="/" replace />} />
@@ -57,12 +69,15 @@ function AuthedShell({
                   <Route path="/check-exam" element={<CheckExamsPage session={session} />} />
                   <Route path="/check-exam/:id" element={<CheckExamDetailPage />} />
                   <Route path="/check-exam/:id/check/:studentIdx" element={<CheckPaperPage />} />
+                  <Route path="/status" element={<PresentationStatusPage />} />
+                  <Route path="/download" element={<DesktopDownloadPage />} />
                   <Route path="/exam" element={<Navigate to="/" replace />} />
                   <Route path="/scanner" element={<ScannerPage />} />
                   <Route path="*" element={<Navigate to="/" replace />} />
                 </>
               )}
             </Routes>
+          </div>
         </div>
       </div>
     </div>
@@ -71,32 +86,39 @@ function AuthedShell({
 
 function PublicShell({ onLogin }: { onLogin: () => void }) {
   const location = useLocation();
+  const widePage = location.pathname === "/status" || location.pathname === "/download";
   // Slide direction is set explicitly by navigations: Continue -> +1, Back -> -1.
   const dir = (location.state as { dir?: number } | null)?.dir ?? 1;
   return (
     <div className="flex h-screen w-full flex-col overflow-hidden bg-background text-foreground">
       <TitleBar />
-      <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-6 overflow-y-auto p-6">
-        <AuthHeader />
+      <div
+        className={`flex min-h-0 flex-1 flex-col items-center gap-6 overflow-y-auto bg-muted/30 px-4 py-8 sm:px-6 ${
+          widePage ? "justify-start" : "justify-center"
+        }`}
+      >
+        {!widePage && <AuthHeader />}
         <AnimatePresence mode="wait" custom={dir}>
           <motion.div
             key={location.pathname}
             custom={dir}
             variants={{
-              enter: (d: number) => ({ opacity: 0, x: d >= 0 ? 60 : -60 }),
-              center: { opacity: 1, x: 0 },
-              exit: (d: number) => ({ opacity: 0, x: d >= 0 ? -60 : 60 }),
+              enter: (d: number) => ({ opacity: 0, y: d >= 0 ? 10 : -10 }),
+              center: { opacity: 1, y: 0 },
+              exit: (d: number) => ({ opacity: 0, y: d >= 0 ? -10 : 10 }),
             }}
             initial="enter"
             animate="center"
             exit="exit"
-            transition={{ duration: 0.25, ease: "easeOut" }}
-            className="w-full max-w-md"
+            transition={{ duration: 0.18, ease: "easeOut" }}
+            className={widePage ? "w-full max-w-7xl" : "w-full max-w-md"}
           >
             <Routes location={location}>
-              <Route path="/" element={<OnboardingPage />} />
+              <Route path="/" element={<OnboardingPage onLogin={onLogin} />} />
               <Route path="/login/coordinator" element={<CoordinatorLoginPage onLogin={onLogin} />} />
               <Route path="/login/teacher" element={<TeacherAuthPage onLogin={onLogin} />} />
+              <Route path="/status" element={<PresentationStatusPage />} />
+              <Route path="/download" element={<DesktopDownloadPage />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </motion.div>

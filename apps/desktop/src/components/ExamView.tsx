@@ -524,10 +524,10 @@ export function ExamView({ token }: { token?: string }) {
   };
 
   return (
-    <main className="mx-auto flex min-h-full w-full max-w-5xl flex-col gap-6 p-6">
+    <main className="app-page max-w-6xl">
       <div className="flex items-center gap-2">
         <FilePlus2 className="size-7" />
-        <h1 className="font-title text-3xl font-bold leading-none tracking-tight">
+        <h1 className="font-title text-2xl font-semibold leading-tight sm:text-[1.75rem]">
           Create exam
         </h1>
       </div>
@@ -536,7 +536,7 @@ export function ExamView({ token }: { token?: string }) {
       <div className="flex w-full flex-1 items-center justify-center">
       <div className="flex w-full flex-col gap-6">
 
-        <Card className="border-0 bg-sidebar shadow-none">
+        <Card>
           <CardHeader>
             <CardTitle className="font-title text-xl font-bold tracking-tight">
               Syllabus upload
@@ -664,7 +664,7 @@ export function ExamView({ token }: { token?: string }) {
 
       {summary && !saved && (
         <section className="flex min-h-0 flex-1 flex-col gap-4">
-          <Card className="flex min-h-0 flex-1 flex-col overflow-hidden border-0 bg-sidebar pt-0 shadow-none">
+          <Card className="flex min-h-0 flex-1 flex-col overflow-hidden pt-0">
             <CardHeader
               className="flex shrink-0 items-center border-b bg-accent px-4"
               style={{ height: 48, paddingTop: 0, paddingBottom: 0 }}
@@ -769,7 +769,7 @@ export function ExamView({ token }: { token?: string }) {
             Syllabus “{saved.name}” saved (id #{saved.id}) — next, upload the
             question paper.
           </p>
-          <Card className="border-0 bg-sidebar shadow-none">
+          <Card>
             <CardHeader>
               <CardTitle className="font-title text-xl font-bold tracking-tight">
                 Question paper upload
@@ -894,7 +894,7 @@ export function ExamView({ token }: { token?: string }) {
 
       {summary && saved && qpResult && !qpAccepted && (
         <section className="flex min-h-0 flex-1 flex-col gap-4">
-          <Card className="flex min-h-0 flex-1 flex-col overflow-hidden border-0 bg-sidebar pt-0 shadow-none">
+          <Card className="flex min-h-0 flex-1 flex-col overflow-hidden pt-0">
             <CardHeader
               className="flex shrink-0 items-center border-b bg-accent px-4"
               style={{ height: 48, paddingTop: 0, paddingBottom: 0 }}
@@ -1221,7 +1221,7 @@ export function ExamView({ token }: { token?: string }) {
 
       {summary && saved && qpResult && qpAccepted && !finalCreated && (
         <section className="flex flex-col gap-4">
-          <Card className="border-0 bg-sidebar shadow-none">
+          <Card>
             <CardHeader>
               <CardTitle className="font-title text-xl font-bold tracking-tight">
                 Assign exam
@@ -1308,7 +1308,7 @@ export function ExamView({ token }: { token?: string }) {
 
       {summary && saved && finalCreated && (
         <section className="flex flex-col gap-4">
-          <Card className="border-0 bg-sidebar shadow-none">
+          <Card>
             <CardHeader>
               <CardTitle className="font-title text-xl font-bold tracking-tight">
                 Exam created
