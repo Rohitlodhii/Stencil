@@ -28,6 +28,8 @@ import {
   fetchStudentRows,
   type StudentDataset,
 } from "@/lib/students";
+import { fetchExamMarks } from "@/lib/marks";
+import { InlineLoader, PageLoader } from "@/components/loading";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
@@ -43,7 +45,7 @@ function qpMeta(q: QPQuestion): string {
   );
 }
 
-function QpNode({ q, depth, index }: { q: QPQuestion; depth: number; index: number }) {
+export function QpNode({ q, depth, index }: { q: QPQuestion; depth: number; index: number }) {
   const label = q.q_no || String(index + 1);
   return (
     <div className="flex flex-col">
@@ -80,6 +82,8 @@ export function CheckExamDetailPage() {
   const [rows, setRows] = useState<Record<string, string>[]>([]);
   const [total, setTotal] = useState(0);
   const [rowsLoading, setRowsLoading] = useState(false);
+  // teacher-updated marks: row index -> total obtained
+  const [marksMap, setMarksMap] = useState<Record<number, number>>({});
 
   // right-side sheets
   const [qpSheetOpen, setQpSheetOpen] = useState(false);
@@ -119,10 +123,29 @@ export function CheckExamDetailPage() {
         } finally {
           setRowsLoading(false);
         }
+        // teacher-updated marks override CSV values + Checked state
+        try {
+          if (detail.student_dataset_id) {
+            const saved = await fetchExamMarks(
+              detail.id,
+              detail.student_dataset_id,
+            );
+            const map: Record<number, number> = {};
+            saved.forEach((m) => {
+              map[m.row_index] = m.total_obtained;
+            });
+            setMarksMap(map);
+          } else {
+            setMarksMap({});
+          }
+        } catch {
+          setMarksMap({});
+        }
       } else {
         setDataset(null);
         setRows([]);
         setTotal(0);
+        setMarksMap({});
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load exam.");
@@ -138,7 +161,7 @@ export function CheckExamDetailPage() {
   if (loading) {
     return (
       <main className="mx-auto flex min-h-full w-full max-w-5xl flex-col gap-6 p-6">
-        <p className="text-sm text-muted-foreground">Loading exam…</p>
+        <PageLoader message="Loading exam…" />
       </main>
     );
   }
@@ -211,34 +234,38 @@ export function CheckExamDetailPage() {
 
       {/* ---- question paper + syllabus shortcut cards ---- */}
       <div className="grid gap-3 sm:grid-cols-2">
-        <Card className="h-12 flex-row items-center gap-2 border-0 bg-sidebar px-4 py-0 shadow-none">
+        <Card className="h-12 flex-row items-center gap-2 border-0 bg-sidebar p-1 pl-4 shadow-none">
           <FileText className="size-5 shrink-0" />
           <span className="font-title min-w-0 flex-1 truncate text-sm font-bold tracking-tight">
             Question paper
           </span>
           <Button
             type="button"
-            variant="secondary"
+            variant="ghost"
             onClick={() => setQpSheetOpen(true)}
-            className="h-7 shrink-0 cursor-pointer text-xs"
+            className="h-full shrink-0 cursor-pointer border border-border bg-border p-1 pr-3 text-xs text-foreground hover:bg-border/80 hover:text-foreground"
           >
-            <Eye className="size-3.5" />
+            <span className="flex h-full aspect-square items-center justify-center rounded-sm bg-accent text-accent-foreground">
+              <Eye className="size-3.5" />
+            </span>
             Show question paper
           </Button>
         </Card>
 
-        <Card className="h-12 flex-row items-center gap-2 border-0 bg-sidebar px-4 py-0 shadow-none">
+        <Card className="h-12 flex-row items-center gap-2 border-0 bg-sidebar p-1 pl-4 shadow-none">
           <BookOpenText className="size-5 shrink-0" />
           <span className="font-title min-w-0 flex-1 truncate text-sm font-bold tracking-tight">
             Syllabus
           </span>
           <Button
             type="button"
-            variant="secondary"
+            variant="ghost"
             onClick={() => setSyllabusSheetOpen(true)}
-            className="h-7 shrink-0 cursor-pointer text-xs"
+            className="h-full shrink-0 cursor-pointer border border-border bg-border p-1 pr-3 text-xs text-foreground hover:bg-border/80 hover:text-foreground"
           >
-            <Eye className="size-3.5" />
+            <span className="flex h-full aspect-square items-center justify-center rounded-sm bg-accent text-accent-foreground">
+              <Eye className="size-3.5" />
+            </span>
             Show syllabus
           </Button>
         </Card>
@@ -349,9 +376,7 @@ export function CheckExamDetailPage() {
 
       {/* ---- students table only (no card, no title) ---- */}
       <section className="flex flex-col gap-3">
-        {rowsLoading && (
-          <p className="text-sm text-muted-foreground">Loading all rows…</p>
-        )}
+        {rowsLoading && <InlineLoader message="Loading all rows…" />}
         {dataset && rows.length > 0 ? (
             <div className="no-scrollbar max-h-[420px] overflow-auto rounded-md border bg-background">
               <table className="w-full border-collapse text-sm">
@@ -373,10 +398,16 @@ export function CheckExamDetailPage() {
                 </thead>
                 <tbody>
                   {rows.map((r, i) => {
-                    const obtained = (
+                    const override = marksMap[i];
+                    const csvObtained = (
                       r[dataset.mapping.obtained_marks] ?? ""
                     ).trim();
-                    const checked = obtained !== "";
+                    const obtained =
+                      override !== undefined
+                        ? String(override)
+                        : csvObtained;
+                    const checked =
+                      override !== undefined || csvObtained !== "";
                     return (
                       <tr key={i} className="border-t align-middle">
                         <td className="whitespace-nowrap px-3 py-2 font-medium">
@@ -403,9 +434,9 @@ export function CheckExamDetailPage() {
                             className="h-7 cursor-pointer p-1 pr-3 text-xs"
                           >
                             <span className="flex h-full aspect-square items-center justify-center rounded-sm bg-secondary p-1 text-secondary-foreground">
-                              <ClipboardCheck className="size-3.5" />
+                              <ClipboardCheck className="size-1.5" />
                             </span>
-                            Check paper
+                            Check
                           </Button>
                         </td>
                       </tr>

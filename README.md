@@ -1,168 +1,275 @@
-# Turborepo — Next.js + FastAPI
+# MPOnline — AI-Assisted Examination Evaluation Platform ("Stencil")
 
-A Turborepo monorepo containing two **completely independent** applications:
+MPOnline ("Stencil") is an exam-management platform with an AI-assisted
+workflow: coordinators upload a syllabus and a question paper, the backend
+converts the paper into a canonical, page-aware JSON representation, the exam
+is assigned to a teacher with a student list, and teachers evaluate
+answer sheets with AI help and record marks.
 
-- `apps/web` — Next.js frontend (React, TypeScript, App Router, Tailwind CSS, ESLint)
-- `apps/api` — Python FastAPI backend (FastAPI, Uvicorn, Pydantic, managed with `uv`)
+## Tech Stack
 
-There is **no integration** between them: no CORS, no API calls from frontend to backend,
-no shared types, env vars, auth, proxy/rewrites, or shared logic. Turborepo only
-orchestrates their tasks from the same repository.
+| Layer | Technology |
+|---|---|
+| Desktop app | Tauri 2 + React 19 + TypeScript + Vite + Tailwind CSS |
+| Web app | Next.js (App Router) — thin client for the sheet scanner |
+| Exam/AI backend | Python 3.12 + FastAPI + Uvicorn, managed with `uv` |
+| Auth service | Python 3.12 + FastAPI + Uvicorn |
+| Gateway | Python 3.12 + FastAPI (single entrypoint for the desktop app) |
+| Sheet scanner | Python + OpenCV (classical CV, no ML models) |
+| AI model | Luna vision/chat model via an OpenAI-compatible API (`free/gpt-6-luna`) |
+| AI access | `openai` SDK + LangChain (`ChatOpenAI`) |
+| Image storage | AWS S3 (public-read bucket, `ap-south-1`) |
+| Databases | Postgres: `examdb` (exams/syllabi/marks) and `mponline_auth` (users) |
+| PDF rendering | PyMuPDF (`fitz`) — each page rendered to PNG |
+| Orchestration | Turborepo + pnpm (JS), `uv` workspaces (Python) |
 
-## Project Structure
+## Architecture & Ports
 
 ```text
-project-root/
-├── apps/
-│   ├── web/              # Next.js frontend → http://localhost:3000
-│   │   ├── app/
-│   │   │   ├── layout.tsx
-│   │   │   ├── page.tsx
-│   │   │   └── globals.css
-│   │   ├── public/
-│   │   ├── package.json
-│   │   ├── next.config.ts
-│   │   └── tsconfig.json
-│   └── api/              # FastAPI backend → http://localhost:8000
-│       ├── app/
-│       │   ├── __init__.py
-│       │   └── main.py
-│       ├── package.json  # turbo task runner (delegates to uv)
-│       └── pyproject.toml
-├── packages/             # (empty, reserved for future shared packages)
-├── package.json          # root scripts: turbo dev / build / lint / typecheck
-├── pnpm-workspace.yaml
-├── turbo.json
-├── pyproject.toml        # uv workspace root (members = ["apps/api"])
-├── uv.lock
-├── .gitignore
-└── README.md
+Desktop (Tauri, Vite :1420) ──direct──▶ Scanner :8000 (MJPEG, captures)
+        │──via gateway :8090──▶ auth :8002, exam :8001, scanner :8000
+        └──direct (VITE_API_URL)──▶ Exam backend :8001
+
+Web (Next.js :3000) ──▶ Scanner :8000 (/scanner page: live feed + gallery)
+```
+
+| Service | Port | Entrypoint | Purpose |
+|---|---|---|---|
+| Sheet scanner | 8000 | `apps/api` → `sheet_scanner.server:app` | Owns the camera, sheet detection, MJPEG `/stream`, captures |
+| Exam/AI backend | 8001 | `apps/api` → `app.main:app` | Luna chat, S3 uploads, syllabus + question-paper pipelines, marks |
+| Auth service | 8002 | `apps/auth-service` → `app.main:app` | Coordinator/teacher accounts, approvals |
+| Gateway | 8090 | `apps/gateway` → `app.main:app` | Path-based routing to the three services above |
+| Web | 3000 | `apps/web` | Scanner preview/gallery client |
+| Desktop Vite | 1420 | `apps/desktop` | Dev server inside the Tauri window |
+
+## Repository Structure
+
+```text
+apps/
+  api/                  # FastAPI exam backend (:8001) + sheet scanner (:8000)
+    app/
+      main.py           # Luna/S3 backend: chat, uploads, syllabus, marks, students
+      ai/               # AIClient, prompts, structured-output parsing (Stencil)
+      question_paper/   # Stencil engine: ingestion → pages → manifest →
+                        #   boundaries → extraction → validation
+      exams/routes.py   # POST /api/exams/analyze + analysis/pages/questions/
+                        #   PATCH + confirm + per-page/per-question retry
+      storage/images.py # S3 upload helper
+    src/sheet_scanner/  # camera loop, detector, server.py (:8000 endpoints)
+  auth-service/         # coordinators (seeded) + teacher register/approve/login
+  gateway/              # /auth/* /exam/* /chat /upload-image /scanner/* routing
+  desktop/              # Tauri + React app (coordinator & teacher workflows)
+    src/
+      pages/            # Onboarding, logins, dashboards, exam creation,
+                        #   students, check-exam + answer-sheet analysis
+      components/ExamView.tsx  # coordinator create-exam wizard
+      lib/exam.ts       # typed client for the exam backend
+  web/                  # Next.js scanner client (/scanner)
 ```
 
 ## Prerequisites
 
-- Node.js >= 20
-- `pnpm` (JS/TS package manager)
-- Python >= 3.12
-- `uv` (Python package manager)
+- Node.js ≥ 20, `pnpm`
+- Python ≥ 3.12, `uv`
+- Postgres running locally (default password per `.env`)
+- AWS credentials with write access to the S3 bucket (`~/.aws/credentials`)
+- Luna API key (`LUNA_API_KEY` in repo-root `.env`)
 
-## Installing Dependencies
-
-```bash
-# Install JS dependencies
-pnpm install
-
-# Install Python dependencies
-cd apps/api
-uv sync
-```
-
-(`uv sync` resolves the workspace from the root `uv.lock`. You can also run `uv sync`
-from the repository root.)
-
-## Running the Dev Stack
+## Setup
 
 ```bash
-# Scanner (:8000) + Luna/S3 backend (:8001) + Tauri desktop window
-pnpm dev
+pnpm install            # JS dependencies (root + web + desktop)
+uv sync                 # Python dependencies (from root uv.lock; or inside apps/api)
 ```
 
-This starts only the desktop workflow (`turbo dev --filter=scanner --filter=desktop`):
+Environment files:
 
-```text
-apps/api (scanner) → OpenCV sheet-scanner server → http://localhost:8000
-apps/api (backend) → Luna chat + S3 uploads API    → http://localhost:8001
-apps/desktop       → Tauri dev (Vite + native app window)
-```
+| File | Contents |
+|---|---|
+| Repo-root `.env` | `LUNA_API_KEY`, `LUNA_BASE_URL`, `LUNA_MODEL=free/gpt-6-luna`, `S3_BUCKET`, `AWS_REGION`, `EXAM_DATABASE_URL=postgresql://postgres:…@localhost:5432/examdb` |
+| `apps/desktop/.env` | `VITE_SCANNER_URL` (:8000), `VITE_API_URL` (:8001), `VITE_GATEWAY_URL`/`VITE_AUTH_URL` (:8090) |
+| `apps/auth-service/.env` (gitignored) | `AUTH_DATABASE_URL=postgresql://postgres:…@localhost:5432/mponline_auth` |
 
-- Scanner: http://localhost:8000/health (`/docs`, MJPEG feed at `/stream`).
-- Backend: http://localhost:8001/health (`/docs`, `/chat`, `/upload-image`).
-- Desktop: native app window opens automatically (Vite on http://localhost:1420).
-- The Next.js web app is **not** started by `pnpm dev`; use `pnpm dev:all`
-  (everything) or `pnpm --filter web dev` (just the web app on :3000).
+Postgres databases (`examdb`, `mponline_auth`) and their tables are
+auto-created on service startup; auth coordinators are seeded too.
 
-- Frontend: http://localhost:3000; scanner page at http://localhost:3000/scanner
-  (live preview, status indicator, Capture button, scans gallery).
-- Backend: http://localhost:8000/health returns `{"status": "ok"}`
-  (docs at http://localhost:8000/docs, MJPEG feed at `/stream`).
-
-## Running Only Next.js
+## Running
 
 ```bash
-cd apps/web
-pnpm dev
+pnpm dev        # scanner + auth-service + gateway + desktop + web (turbo filters)
+pnpm dev:all    # everything (turbo dev)
 ```
 
-Open http://localhost:3000.
-
-## Running Only the Scanner Server
+Or per service:
 
 ```bash
-cd apps/api
+# scanner :8000 + exam backend :8001 (labeled output, like pnpm dev for api)
+cd apps/api && pnpm dev
+# individually:
 uv run uvicorn sheet_scanner.server:app --reload --port 8000
+uv run uvicorn app.main:app --reload --port 8001
+cd ../auth-service && uv run uvicorn app.main:app --reload --port 8002
+cd ../gateway && uv run uvicorn app.main:app --reload --port 8090
 ```
 
-Open http://localhost:8000/health and http://localhost:8000/stream.
+Docs: http://localhost:8001/docs, http://localhost:8002/docs,
+http://localhost:8090/docs. Only one process may bind a port — a second
+`uvicorn ... --port 8001` exits with `winerror 10048`; that means the
+backend is already running (check `/health`).
 
-## Turborepo Commands
+## User Workflows
 
-Run from the repository root:
+### Roles & login
 
-```bash
-pnpm dev        # desktop workflow only: scanner + backend + Tauri window
-pnpm dev:all    # turbo dev — starts every dev task incl. Next.js web
-pnpm build      # turbo build — builds all apps that define a build script
-pnpm lint       # turbo lint — lints all apps that define a lint script
-pnpm typecheck  # turbo typecheck — typechecks all apps that define a typecheck script
-```
+- **Coordinators** are pre-seeded (`coord_rgpv`, `coord_davv`, `coord_manit`,
+  password `coord123`). No registration.
+- **Teachers** register → wait for coordinator approval → login
+  (`403 pending_approval` while waiting, `403 banned` after a decline).
+  Sessions persist in `localStorage` (`mponline_session`).
 
-`turbo.json` marks `dev` as `persistent: true` with `cache: false`, which is the
-correct configuration for long-running dev servers in current Turborepo versions.
+### Coordinator: create exam (`/exam` → `ExamView`)
 
-The scanner `dev` task (`apps/api/package.json`, named `scanner`) runs both
-Python servers side by side with labeled output (via `concurrently`):
+1. **Syllabus upload** — subject name + syllabus PDF (≤ 5 MB) →
+   `POST /exam/summarize-syllabus`: PDF → page PNGs → S3 → per-page Luna
+   vision analysis → one merged markdown summary. Preview/edit the markdown,
+   then **Accept** (`POST /exam/save`).
+2. **Question-paper upload** — paper PDF (≤ 10 MB) →
+   `POST /api/exams/analyze` returns `{exam_id, status: "processing"}`
+   immediately; the Stencil pipeline runs in the background while the UI
+   polls `GET /api/exams/{id}/analysis` every 2 s with live progress
+   (`ANALYZING_PAGES — page 3/10…`). See "Question-Paper Engine" below.
+3. **Review** — `QUESTION PAPER ANALYSIS` screen shows Subject / Pages /
+   Detected Questions / Maximum Marks, ✓/✗ validation ticks, ⚠ warnings,
+   per-question source pages, visuals, OR alternatives, subquestions, and a
+   question→pages map. Every question is editable (text, marks, number,
+   section); edits `PATCH` the canonical question. **Review & confirm**
+   marks the exam `READY_FOR_EVALUATION`. (If the canonical engine is down,
+   the UI automatically falls back to the legacy extractor.)
+4. **Assign** — pick an approved teacher + a student CSV list, then
+   **Create exam** (`POST /exam/final/create`). Visible on the dashboard.
 
-```bash
-uv run uvicorn sheet_scanner.server:app --reload --port 8000  # OpenCV scanner
-uv run uvicorn app.main:app --reload --port 8001              # Luna/S3 backend
-```
+### Coordinator: students & teachers
 
-## Python / uv Commands
+- **Students** (`/students/new`): upload a CSV (branch, semester, teacher,
+  subject + column mapping for `student_name/total_marks/obtained_marks/
+  attendance`) → raw file to S3, metadata in `examdb`. Datasets are
+  re-readable row-by-row for evaluation.
+- **Teachers** (`/teachers`): approve/reject registrations, manage the roster.
 
-Run from `apps/api` (or the repo root — `uv` finds the workspace):
+### Teacher: evaluate (`/check-exam`)
 
-```bash
-uv sync                                                # install / sync dependencies from uv.lock
-uv run uvicorn sheet_scanner.server:app --reload --port 8000  # run the scanner server
-uv run sheet-scanner                                   # same server via the CLI entry point
-uv add <package>                                       # add a dependency (updates uv.lock)
-```
+- Open an assigned exam → pick a student → photograph/upload the handwritten
+  answer sheet → `POST /exam/analyze-answer-sheet`: Luna matches the
+  handwriting to one question and returns `max_marks`, `awarded_marks`,
+  expected answer, strengths, improvements.
+- Confirm/adjust per-question marks → `PUT /exam/marks` (upsert, clamped to
+  `[0, max_marks]`, total recomputed server-side) → `GET /exam/marks` lists
+  saved marks. The scanner page (`/scanner`) shows the live sheet-detection
+  feed for capturing sheets with a PC webcam.
 
-- Python dependencies are managed **only** with `uv`, never with npm/pnpm.
-- `uv.lock` is committed. `.venv` is gitignored.
+## Question-Paper Engine ("Stencil" canonical JSON)
 
-## Sheet Scanner (Python, OpenCV) + Frontend
+A physical page is **not** a logical question: a question can span pages and
+a page can hold many questions. The model is always
+question → many pages **and** page → many questions. Answer-sheet evaluation
+is intentionally **not** part of this engine; it only produces the canonical
+exam JSON that the evaluator will later consume.
 
-`apps/api` is the sheet-scanner server: it owns the camera, runs detection
-in a background loop, auto-captures settled sheets, and exposes
-`/stream` (MJPEG), `/status`, `/cameras` + `/camera` (PC webcam selection),
-`/capture`, `/scans`, `/scans/{filename}`.
-CORS is enabled for `http://localhost:3000` only.
+Pipeline (`PDF → Page Analysis → Manifest → Boundaries → Extraction →
+Validation → Review → READY`):
 
-`apps/web` is a pure client: `/scanner` embeds the MJPEG stream in an
-`<img>`, polls `/status` every 400 ms, and renders the gallery from
-`/scans`. No camera or CV code exists in the frontend. See
-`apps/api/README.md` for full docs.
+1. **Ingestion** (`question_paper/ingestion.py`, `pdf_renderer.py`) —
+   validate PDF, render each page to PNG (PyMuPDF, no cropping), upload to
+   S3, create `PageRecord`s (`page_number, image_url, width, height, status`).
+2. **Page analysis** (`page_analyzer.py`) — **one small Luna vision call per
+   page**, never the final JSON: sections, question `start`/`continuation`
+   blocks with pixel bboxes, subquestions, OR indicators, marks, word
+   limits, attempt rules, passages/tables/diagrams/graphs/formulas,
+   instructions, exam info. One bad page degrades to an empty analysis, not
+   a failed job.
+3. **Page manifest** (`page_manifest.py`) — first-class stored object kept
+   after the final JSON (powers `/pages` + debugging).
+4. **Boundary resolution** (`boundary_resolver.py`, pure Python) — e.g.
+   `Q1 → [2,3,4]`, `Q2 → [4,5,6]`; shared pages belong to both questions.
+5. **Question extraction** (`question_extractor.py`) — one targeted Luna call
+   per logical question carrying **only its pages/regions**. Preserves
+   wording, marks, OR alternatives (`choose_one`), "attempt any N"
+   (`choose_n` + `marks_per_item`), word limits, subquestions, passages
+   (one object across pages), visuals (image is truth, description is
+   supplemental; tables keep `structured_data`, `null` when uncertain).
+   Every object keeps source pages + bboxes ("View source" traceability)
+   plus a `confidence` block.
+6. **Validation** (`validator.py`, deterministic — AI output is never
+   trusted): marks totals, `N × marks` rules, OR/subquestion sums, duplicate
+   / missing question numbers, page references, bbox validity.
+7. **Review/confirm** — `NEEDS_REVIEW` → human edits → `POST …/confirm` →
+   `READY_FOR_EVALUATION`. Single-page retry (`…/pages/{n}/retry`) and
+   single-question retry (`…/questions/{id}/retry`) — never a full restart.
 
-```bash
-cd apps/api
-uv sync
-uv run sheet-scanner   # 'c' = capture now, 'q' = quit
-```
+**AI call budget:** exactly **pages + logical questions** per paper
+(e.g. 10 pages / 8 questions ≈ 18 Luna calls, sequential ⇒ several
+minutes). `GET …/analysis` reports the live `ai_calls`
+`{total, page_analysis, question_extraction, failed}` breakdown.
+All Luna access goes through `AIClient` (`app/ai/`), so the model can be
+swapped without touching the engine. Every AI operation is logged
+(exam/page/question, retries, success, error — never API keys); pipeline
+progress also prints as `[stencil:<exam_id>] …` lines in the `:8001`
+terminal.
 
-## App Relationship
+Explicit states: `UPLOADED → RENDERING → ANALYZING_PAGES →
+BUILDING_PAGE_MANIFEST → RESOLVING_QUESTIONS → EXTRACTING_QUESTIONS →
+VALIDATING → NEEDS_REVIEW → READY_FOR_EVALUATION` (plus `FAILED`).
 
-The Python scanner owns the camera and all CV logic; the Next.js app is a
-pure client that embeds its MJPEG stream and calls its REST endpoints.
-There is no shared code, no shared env vars beyond the scanner URL, and no
-browser-side camera access.
+## API Reference (exam backend `:8001`)
+
+| Method | Path | Meaning |
+|---|---|---|
+| `GET` | `/health`, `/config` | liveness + non-secret config |
+| `GET` | `/metrics/hits` | requests in last minute + per-minute buckets (15 min, in-memory) |
+| `POST` | `/chat` | Luna chat completion (LangChain) |
+| `POST` | `/upload-image` | image → S3 public URL (≤ 10 MB) |
+| `POST` | `/exam/summarize-syllabus` | syllabus PDF → per-page analysis → merged markdown |
+| `POST` | `/exam/save`, `GET` | persist / list accepted syllabus summaries |
+| `POST` | `/api/exams/analyze` | question-paper PDF → `{exam_id, status: "processing"}` (background) |
+| `GET` | `/api/exams/{id}/analysis` | status, progress, validation, warnings, `ai_calls`, error |
+| `GET` | `/api/exams/{id}/pages` | page manifest + question ranges + page→questions |
+| `GET` | `/api/exams/{id}/questions` | canonical question JSON |
+| `GET` | `/api/exams/{id}/questions/{qid}` | one question + source + visuals |
+| `PATCH` | `/api/exams/{id}/questions/{qid}` | human correction (re-validates) |
+| `POST` | `/api/exams/{id}/confirm` | → `READY_FOR_EVALUATION` |
+| `POST` | `/api/exams/{id}/pages/{n}/retry` | retry one page |
+| `POST` | `/api/exams/{id}/questions/{qid}/retry` | retry one question |
+| `POST` | `/exam/analyze-question-paper` | legacy extractor (UI fallback) |
+| `POST` | `/exam/final/create` | create assigned exam |
+| `GET` | `/exam/final/list?teacher=`, `/exam/final/{id}` | list / detail |
+| `POST` | `/exam/analyze-answer-sheet` | answer photo vs paper JSON → marks + feedback |
+| `PUT`/`GET` | `/exam/marks` | upsert / list teacher marks |
+| `POST`/`GET` | `/exam/students/upload`, `/exam/students…` | student CSV datasets + rows |
+
+Auth (`:8002`): `GET /auth/colleges`, `GET /auth/seeded-coordinators`,
+`POST /auth/teacher/register|login`, `POST /auth/coordinator/login`,
+`GET /auth/me`, `GET /auth/coordinator/requests?status=`,
+`POST /auth/coordinator/requests/{id}/decision`.
+
+Scanner (`:8000`): `GET /health /stream /status /cameras /scans
+/scans/{f}`, `POST /camera /capture`.
+
+## Databases
+
+- **`examdb`** (`EXAM_DATABASE_URL`): `exams` (syllabus summaries),
+  `final_exams`, `student_marks`, `student_datasets`, plus `stencil_exams`,
+  `stencil_pages`, `stencil_sections`, `stencil_questions`,
+  `stencil_visuals`, `stencil_subquestions` (canonical pipeline; memory
+  store keeps the API working when Postgres is down).
+- **`mponline_auth`** (`AUTH_DATABASE_URL`): users + approval requests.
+
+## Troubleshooting
+
+| Symptom | Cause / fix |
+|---|---|
+| `winerror 10048` on startup | Port already bound — the service is already running; use it or `Stop-Process -Id <pid>` first |
+| Analysis spins with no progress | Old backend predates the background pipeline — wait for `--reload`, then re-upload; watch for `[stencil:…]` lines in the `:8001` terminal |
+| `FAILED` analysis | Read `error` from `GET …/analysis`; retry the flagged page/question via the retry endpoints |
+| S3 upload errors | Check AWS credentials + bucket/region env |
+| Luna errors / empty replies | Check `LUNA_API_KEY`/`LUNA_BASE_URL`; per-page fallback keeps the job alive |
+| Camera issues | Tune `uv run sheet-scanner --help` flags (area, Canny, stability) |

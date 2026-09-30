@@ -1,13 +1,26 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   ArrowLeft,
+  BadgeCheck,
   Check,
   FileText,
   Loader2,
+  MessageSquarePlus,
   PanelLeft,
+  Sparkles,
+  TrendingUp,
   Wand2,
+  X,
 } from "lucide-react";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuLabel,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
 import {
   Sheet,
   SheetContent,
@@ -19,6 +32,13 @@ import { QpNode } from "./CheckExamDetailPage";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Kbd } from "@/components/ui/kbd";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Tabs,
   TabsContent,
@@ -34,11 +54,23 @@ import {
 import { fetchStudentDataset, fetchStudentRows } from "@/lib/students";
 import { getAnswerSheets, sheetKey } from "@/lib/answerSheets";
 import { fetchExamMarks, saveStudentMarks } from "@/lib/marks";
-import { AnalysisSkeleton, PageLoader } from "@/components/loading";
+import { PageLoader } from "@/components/loading";
 import {
   AnswerSheetChat,
   type ChatGrading,
+  type ChatRequest,
 } from "@/components/chat/AnswerSheetChat";
+
+/** Prompts the answer-sheet image menu sends into the chat. */
+const CHAT_PROMPTS = {
+  attach: "",
+  askMarks:
+    "Look at the attached answer-sheet page and tell me what marks this answer deserves. Match it against the question paper, explain what is right, what is missing, and justify the marks.",
+  increase:
+    "I think this answer deserves more marks than it got. Re-read the attached page against the question paper and reassess — which parts earn more credit, and what should the final marks be?",
+  analyze:
+    "Analyze the attached answer-sheet page in detail against the question paper: what the student wrote, what is correct, what is missing, and the marks it should get.",
+} as const;
 
 type MarksRow = {
   key: string;
@@ -113,6 +145,14 @@ export function AnswerSheetAnalysisPage() {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveOk, setSaveOk] = useState(false);
+
+  // answer-sheet image menus: right-click actions + left-click quick marks.
+  // The quick-marks card is fixed-positioned so the preview scroller can never
+  // clip it.
+  const [queued, setQueued] = useState<ChatRequest | null>(null);
+  const [quickMarks, setQuickMarks] = useState<{ x: number; y: number } | null>(null);
+  const [quickQ, setQuickQ] = useState("");
+  const requestSeq = useRef(0);
 
   const load = useCallback(async () => {
     if (!Number.isFinite(examId) || !Number.isFinite(rowIdx) || rowIdx < 0) {
@@ -308,6 +348,53 @@ export function AnswerSheetAnalysisPage() {
     [leafRows],
   );
 
+  /** Send one of the image-menu actions into the chat panel. */
+  const queueChat = useCallback(
+    (kind: keyof typeof CHAT_PROMPTS, pageIdx: number) => {
+      setPanelTab("chat");
+      setQueued({
+        id: (requestSeq.current += 1),
+        text: CHAT_PROMPTS[kind],
+        pageIdx,
+        attachOnly: kind === "attach",
+      });
+    },
+    [],
+  );
+
+  /** Marks row the quick-marks popup fills (null until a question is picked). */
+  const quickRow = useMemo(
+    () => leafRows.find((r) => r.key === quickQ) ?? null,
+    [leafRows, quickQ],
+  );
+
+  const applyQuickMarks = (n: number) => {
+    if (!quickQ) return;
+    setSaveOk(false);
+    setInputs((prev) => ({ ...prev, [quickQ]: String(n) }));
+    setQuickMarks(null);
+  };
+
+  const openQuickMarks = (e: React.MouseEvent<HTMLElement>) => {
+    const w = 236;
+    const h = 132;
+    setQuickMarks({
+      x: Math.max(8, Math.min(e.clientX, window.innerWidth - w - 8)),
+      y: Math.max(8, Math.min(e.clientY, window.innerHeight - h - 8)),
+    });
+    setQuickQ((prev) => prev || leafRows[0]?.key || "");
+  };
+
+  // Escape closes the quick-marks popup.
+  useEffect(() => {
+    if (!quickMarks) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setQuickMarks(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [quickMarks]);
+
   const onUpdateMarks = async () => {
     if (!exam || datasetId === null) return;
     setSaveError(null);
@@ -344,7 +431,6 @@ export function AnswerSheetAnalysisPage() {
     return (
       <main className="flex min-h-full w-full flex-col gap-6 p-6">
         <PageLoader message="Loading answer sheets…" />
-        <AnalysisSkeleton />
       </main>
     );
   }
@@ -413,16 +499,41 @@ export function AnswerSheetAnalysisPage() {
         </span>
       </header>
 
-      <div className="flex min-h-[480px] flex-1 flex-col gap-3 p-3 lg:h-[calc(100vh-6.5rem)] lg:flex-row lg:overflow-hidden">
+      <div className="flex min-h-[480px] flex-1 flex-col gap-3 p-3 lg:h-[calc(100vh-6.5rem)] lg:flex-row lg:gap-0 lg:overflow-hidden lg:py-3 lg:pl-3 lg:pr-0">
         {/* middle: selected page fullscreen + floating pages dock */}
         <div className="relative flex min-w-0 flex-1 flex-col lg:min-h-0">
-          <section className="flex min-h-[320px] min-w-0 flex-1 items-center justify-center overflow-auto bg-accent p-2 lg:min-h-0">
+          <section className="flex min-h-[320px] min-w-0 flex-1 items-center justify-center overflow-auto rounded-2xl bg-accent p-2 lg:min-h-0">
             {previews[selected] ? (
-              <img
-                src={previews[selected]}
-                alt={`Answer sheet page ${selected + 1} fullscreen`}
-                className="max-h-full w-full object-contain"
-              />
+              <ContextMenu>
+                <ContextMenuTrigger asChild>
+                  <img
+                    src={previews[selected]}
+                    alt={`Answer sheet page ${selected + 1} fullscreen`}
+                    onClick={openQuickMarks}
+                    className="max-h-full w-full cursor-pointer object-contain"
+                  />
+                </ContextMenuTrigger>
+                <ContextMenuContent className="w-52">
+                  <ContextMenuLabel>Page {selected + 1}</ContextMenuLabel>
+                  <ContextMenuSeparator />
+                  <ContextMenuItem onSelect={() => queueChat("attach", selected)}>
+                    <MessageSquarePlus className="size-4" />
+                    Add to chat
+                  </ContextMenuItem>
+                  <ContextMenuItem onSelect={() => queueChat("askMarks", selected)}>
+                    <BadgeCheck className="size-4" />
+                    Ask marks
+                  </ContextMenuItem>
+                  <ContextMenuItem onSelect={() => queueChat("increase", selected)}>
+                    <TrendingUp className="size-4" />
+                    Increase marks
+                  </ContextMenuItem>
+                  <ContextMenuItem onSelect={() => queueChat("analyze", selected)}>
+                    <Sparkles className="size-4" />
+                    Analyze
+                  </ContextMenuItem>
+                </ContextMenuContent>
+              </ContextMenu>
             ) : (
               <p className="text-sm text-muted-foreground">No page selected.</p>
             )}
@@ -493,10 +604,86 @@ export function AnswerSheetAnalysisPage() {
               </div>
             </div>
           )}
+
+          {/* left-click quick marks — fixed so the preview scroller can't clip it */}
+          {quickMarks && (
+            <>
+              <div
+                className="fixed inset-0 z-40"
+                onClick={() => setQuickMarks(null)}
+                aria-hidden="true"
+              />
+              <div
+                role="dialog"
+                aria-label={`Quick marks for page ${selected + 1}`}
+                className="fixed z-50 flex w-[236px] flex-col gap-2 rounded-xl border bg-background p-2 shadow-xl"
+                style={{ left: quickMarks.x, top: quickMarks.y }}
+              >
+                <div className="flex items-center gap-1.5">
+                  <Select value={quickQ} onValueChange={setQuickQ}>
+                    <SelectTrigger
+                      size="sm"
+                      className="h-6 flex-1 rounded-md px-2 py-0 text-[11px] data-[size=sm]:h-6"
+                    >
+                      <SelectValue placeholder="Select question…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {questionOptions.map((o) => (
+                        <SelectItem key={o.value} value={o.value}>
+                          {o.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <button
+                    type="button"
+                    onClick={() => setQuickMarks(null)}
+                    aria-label="Close quick marks"
+                    className="flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+                  >
+                    <X className="size-3.5" />
+                  </button>
+                </div>
+                <div className="grid grid-cols-6 gap-1">
+                  {[1, 2, 3, 4, 5, 6].map((n) => {
+                    const capped = quickRow !== null && quickRow.max > 0 && n > quickRow.max;
+                    const chosen = quickRow !== null && inputs[quickRow.key] === String(n);
+                    return (
+                      <button
+                        key={n}
+                        type="button"
+                        disabled={!quickQ || capped}
+                        onClick={() => applyQuickMarks(n)}
+                        title={
+                          quickRow
+                            ? `${quickRow.label} · max ${quickRow.max || "—"}`
+                            : "Pick a question"
+                        }
+                        className={`h-7 cursor-pointer rounded-md border text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
+                          chosen
+                            ? "border-primary bg-primary text-primary-foreground"
+                            : "hover:bg-accent hover:text-accent-foreground"
+                        }`}
+                      >
+                        {n}
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="px-0.5 text-[10px] text-muted-foreground">
+                  {quickQ
+                    ? `${quickRow?.label ?? quickQ}${
+                        quickRow && quickRow.max > 0 ? ` · max ${quickRow.max}` : ""
+                      } — click a number to set marks`
+                    : "Pick a question to set marks"}
+                </p>
+              </div>
+            </>
+          )}
         </div>
 
-        {/* right: AI analysis */}
-        <aside className="flex w-full shrink-0 flex-col gap-3 overflow-y-auto rounded-md border bg-sidebar p-4 lg:min-h-0 lg:w-[48rem]">
+        {/* right: chat panel — flush against the top nav, no card chrome */}
+        <aside className="flex w-full shrink-0 flex-col gap-3 overflow-y-auto border-t bg-sidebar p-4 lg:-my-3 lg:min-h-0 lg:w-[48rem] lg:border-l lg:border-t-0">
           <Tabs
             value={panelTab}
             onValueChange={(v) => setPanelTab(v as "chat" | "marks")}
@@ -539,6 +726,8 @@ export function AnswerSheetAnalysisPage() {
                 onAcceptMarks={onAcceptMarks}
                 onJumpToPage={setSelected}
                 onReviewMarks={() => setPanelTab("marks")}
+                queued={queued}
+                onQueuedHandled={() => setQueued(null)}
               />
             </TabsContent>
             <TabsContent

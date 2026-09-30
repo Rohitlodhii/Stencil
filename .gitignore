@@ -29,3 +29,9 @@ output/
 # OS / Editor
 .DS_Store
 *.local
+
+# Dev logs
+*.log
+
+# Agent scratch
+__agent__/

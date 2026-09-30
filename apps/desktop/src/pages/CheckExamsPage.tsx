@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ClipboardCheck, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { InlineLoader } from "@/components/loading";
 import type { Session } from "@/lib/auth";
 import { fetchFinalExams, type FinalExam } from "@/lib/exam";
 
@@ -56,57 +57,62 @@ export function CheckExamsPage({ session }: { session: Session }) {
           </Button>
         </div>
 
-        {loading && <p className="text-sm text-muted-foreground">Loading…</p>}
-        {error && <p className="text-sm text-destructive">{error}</p>}
+        {loading ? (
+          <InlineLoader message="Loading exams…" />
+        ) : (
+          <>
+            {error && <p className="text-sm text-destructive">{error}</p>}
 
-        {!loading && !error && exams.length === 0 && (
-          <p className="text-sm text-muted-foreground">
-            No exams assigned to you yet.
-          </p>
-        )}
+            {!error && exams.length === 0 && (
+              <p className="text-sm text-muted-foreground">
+                No exams assigned to you yet.
+              </p>
+            )}
 
-        {exams.length > 0 && (
-          <div className="overflow-x-auto rounded-md border">
-            <table className="w-full border-collapse text-sm">
-              <thead>
-                <tr className="bg-muted text-left">
-                  <th className="px-3 py-2 font-semibold">Subject</th>
-                  <th className="px-3 py-2 font-semibold">Questions</th>
-                  <th className="px-3 py-2 font-semibold">Marks</th>
-                  <th className="px-3 py-2 font-semibold">Students</th>
-                  <th className="px-3 py-2 font-semibold">Created</th>
-                  <th className="px-3 py-2 font-semibold text-right">Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {exams.map((e) => (
-                  <tr key={e.id} className="border-t align-top">
-                    <td className="px-3 py-2 font-medium">{e.subject_name}</td>
-                    <td className="px-3 py-2">{e.total_questions}</td>
-                    <td className="px-3 py-2">{e.total_marks}</td>
-                    <td className="px-3 py-2 text-xs text-muted-foreground">
-                      {e.student_label || "—"}
-                    </td>
-                    <td className="px-3 py-2 text-xs text-muted-foreground">
-                      {new Date(e.created_at).toLocaleString()}
-                    </td>
-                    <td className="px-3 py-2 text-right">
-                      <Button
-                        type="button"
-                        onClick={() => navigate(`/check-exam/${e.id}`)}
-                        className="h-7 cursor-pointer p-1 pr-3 text-xs"
-                      >
-                        <span className="flex h-full aspect-square items-center justify-center rounded-sm bg-secondary p-1 text-secondary-foreground">
-                          <ClipboardCheck className="size-3.5" />
-                        </span>
-                        Check
-                      </Button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+            {exams.length > 0 && (
+              <div className="overflow-x-auto rounded-md border">
+                <table className="w-full border-collapse text-sm">
+                  <thead>
+                    <tr className="bg-muted text-left">
+                      <th className="px-3 py-2 font-semibold">Subject</th>
+                      <th className="px-3 py-2 font-semibold">Questions</th>
+                      <th className="px-3 py-2 font-semibold">Marks</th>
+                      <th className="px-3 py-2 font-semibold">Students</th>
+                      <th className="px-3 py-2 font-semibold">Created</th>
+                      <th className="px-3 py-2 font-semibold text-right">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {exams.map((e) => (
+                      <tr key={e.id} className="border-t align-top">
+                        <td className="px-3 py-2 font-medium">{e.subject_name}</td>
+                        <td className="px-3 py-2">{e.total_questions}</td>
+                        <td className="px-3 py-2">{e.total_marks}</td>
+                        <td className="px-3 py-2 text-xs text-muted-foreground">
+                          {e.student_label || "—"}
+                        </td>
+                        <td className="px-3 py-2 text-xs text-muted-foreground">
+                          {new Date(e.created_at).toLocaleString()}
+                        </td>
+                        <td className="px-3 py-2 text-right">
+                          <Button
+                            type="button"
+                            onClick={() => navigate(`/check-exam/${e.id}`)}
+                            className="h-7 cursor-pointer p-1 pr-3 text-xs"
+                          >
+                            <span className="flex h-full aspect-square items-center justify-center rounded-sm bg-secondary p-1 text-secondary-foreground">
+                              <ClipboardCheck className="size-3.5" />
+                            </span>
+                            Check
+                          </Button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </>
         )}
       </section>
     </main>

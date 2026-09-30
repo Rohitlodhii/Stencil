@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { FilePlus2, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { InlineLoader } from "@/components/loading";
 import type { Session } from "@/lib/auth";
 import {
   fetchFinalExams,
@@ -73,46 +74,51 @@ export function CoordinatorDashboardPage({ session }: { session: Session }) {
           </div>
         </div>
 
-        {loading && <p className="text-sm text-muted-foreground">Loading…</p>}
-        {error && <p className="text-sm text-destructive">{error}</p>}
+        {loading ? (
+          <InlineLoader message="Loading exams…" />
+        ) : (
+          <>
+            {error && <p className="text-sm text-destructive">{error}</p>}
 
-        {!loading && !error && finalExams.length === 0 && (
-          <p className="text-sm text-muted-foreground">
-            No created exams yet — build one from the exam page.
-          </p>
-        )}
+            {!error && finalExams.length === 0 && (
+              <p className="text-sm text-muted-foreground">
+                No created exams yet — build one from the exam page.
+              </p>
+            )}
 
-        {finalExams.length > 0 && (
-          <div className="overflow-x-auto rounded-md border">
-            <table className="w-full border-collapse text-sm">
-              <thead>
-                <tr className="bg-muted text-left">
-                  <th className="px-3 py-2 font-semibold">Subject</th>
-                  <th className="px-3 py-2 font-semibold">Questions</th>
-                  <th className="px-3 py-2 font-semibold">Marks</th>
-                  <th className="px-3 py-2 font-semibold">Teacher</th>
-                  <th className="px-3 py-2 font-semibold">Students</th>
-                  <th className="px-3 py-2 font-semibold">Created</th>
-                </tr>
-              </thead>
-              <tbody>
-                {finalExams.map((e) => (
-                  <tr key={e.id} className="border-t align-top">
-                    <td className="px-3 py-2 font-medium">{e.subject_name}</td>
-                    <td className="px-3 py-2">{e.total_questions}</td>
-                    <td className="px-3 py-2">{e.total_marks}</td>
-                    <td className="px-3 py-2">{e.assigned_teacher}</td>
-                    <td className="px-3 py-2 text-xs text-muted-foreground">
-                      {e.student_label || "—"}
-                    </td>
-                    <td className="px-3 py-2 text-xs text-muted-foreground">
-                      {new Date(e.created_at).toLocaleString()}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+            {finalExams.length > 0 && (
+              <div className="overflow-x-auto rounded-md border">
+                <table className="w-full border-collapse text-sm">
+                  <thead>
+                    <tr className="bg-muted text-left">
+                      <th className="px-3 py-2 font-semibold">Subject</th>
+                      <th className="px-3 py-2 font-semibold">Questions</th>
+                      <th className="px-3 py-2 font-semibold">Marks</th>
+                      <th className="px-3 py-2 font-semibold">Teacher</th>
+                      <th className="px-3 py-2 font-semibold">Students</th>
+                      <th className="px-3 py-2 font-semibold">Created</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {finalExams.map((e) => (
+                      <tr key={e.id} className="border-t align-top">
+                        <td className="px-3 py-2 font-medium">{e.subject_name}</td>
+                        <td className="px-3 py-2">{e.total_questions}</td>
+                        <td className="px-3 py-2">{e.total_marks}</td>
+                        <td className="px-3 py-2">{e.assigned_teacher}</td>
+                        <td className="px-3 py-2 text-xs text-muted-foreground">
+                          {e.student_label || "—"}
+                        </td>
+                        <td className="px-3 py-2 text-xs text-muted-foreground">
+                          {new Date(e.created_at).toLocaleString()}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </>
         )}
       </section>
 
@@ -126,33 +132,39 @@ export function CoordinatorDashboardPage({ session }: { session: Session }) {
           </p>
         </div>
 
-        {!loading && !error && exams.length === 0 && (
-          <p className="text-sm text-muted-foreground">No saved exams yet.</p>
-        )}
+        {loading ? (
+          <InlineLoader message="Loading exams…" />
+        ) : (
+          <>
+            {!error && exams.length === 0 && (
+              <p className="text-sm text-muted-foreground">No saved exams yet.</p>
+            )}
 
-        {exams.length > 0 && (
-          <div className="overflow-x-auto rounded-md border">
-            <table className="w-full border-collapse text-sm">
-              <thead>
-                <tr className="bg-muted text-left">
-                  <th className="px-3 py-2 font-semibold">Name</th>
-                  <th className="px-3 py-2 font-semibold">Pages</th>
-                  <th className="px-3 py-2 font-semibold">Saved</th>
-                </tr>
-              </thead>
-              <tbody>
-                {exams.map((e) => (
-                  <tr key={e.id} className="border-t align-top">
-                    <td className="px-3 py-2 font-medium">{e.name}</td>
-                    <td className="px-3 py-2">{e.num_images}</td>
-                    <td className="px-3 py-2 text-xs text-muted-foreground">
-                      {new Date(e.created_at).toLocaleString()}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+            {exams.length > 0 && (
+              <div className="overflow-x-auto rounded-md border">
+                <table className="w-full border-collapse text-sm">
+                  <thead>
+                    <tr className="bg-muted text-left">
+                      <th className="px-3 py-2 font-semibold">Name</th>
+                      <th className="px-3 py-2 font-semibold">Pages</th>
+                      <th className="px-3 py-2 font-semibold">Saved</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {exams.map((e) => (
+                      <tr key={e.id} className="border-t align-top">
+                        <td className="px-3 py-2 font-medium">{e.name}</td>
+                        <td className="px-3 py-2">{e.num_images}</td>
+                        <td className="px-3 py-2 text-xs text-muted-foreground">
+                          {new Date(e.created_at).toLocaleString()}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </>
         )}
       </section>
     </main>

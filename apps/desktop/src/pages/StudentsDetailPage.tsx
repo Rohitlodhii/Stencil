@@ -18,6 +18,7 @@ import {
   type StudentDataset,
   type StudentMapping,
 } from "@/lib/students";
+import { InlineLoader, PageLoader } from "@/components/loading";
 
 const inputCls =
   "h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring";
@@ -195,7 +196,7 @@ export function StudentsDetailPage() {
   if (loading) {
     return (
       <main className="mx-auto flex min-h-full w-full max-w-5xl flex-col gap-6 p-6">
-        <p className="text-sm text-muted-foreground">Loading…</p>
+        <PageLoader message="Loading student data…" />
       </main>
     );
   }
@@ -356,11 +357,17 @@ export function StudentsDetailPage() {
           <h2 className="font-title text-xl font-bold tracking-tight">
             All student data
           </h2>
-          <p className="text-sm text-muted-foreground">
-            {rowsLoading
-              ? "Loading all rows…"
-              : `${rows.length} of ${total} rows shown${truncated ? " (truncated)" : ""}`}
-          </p>
+          <div className="flex items-center gap-2">
+            <h2 className="font-title text-xl font-bold tracking-tight">
+              All student data
+            </h2>
+            {rowsLoading && <InlineLoader message="Loading all rows…" className="py-0" />}
+          </div>
+          {!rowsLoading && (
+            <p className="text-sm text-muted-foreground">
+              {`${rows.length} of ${total} rows shown${truncated ? " (truncated)" : ""}`}
+            </p>
+          )}
         </div>
         <div className="no-scrollbar max-h-[420px] overflow-auto rounded-md border">
           <table className="w-full border-collapse text-sm">

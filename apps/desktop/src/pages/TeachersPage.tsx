@@ -5,6 +5,7 @@ import {
   type Session,
   type TeacherRequest,
 } from "@/lib/auth";
+import { InlineLoader } from "@/components/loading";
 
 export function TeachersPage({ session }: { session: Session }) {
   const [requests, setRequests] = useState<TeacherRequest[]>([]);
@@ -74,10 +75,15 @@ export function TeachersPage({ session }: { session: Session }) {
         </button>
       </div>
 
-      {loading && <p className="text-sm text-muted-foreground">Loading…</p>}
-      {error && <p className="text-sm text-destructive">{error}</p>}
-      {!loading && requests.length === 0 && (
-        <p className="text-sm text-muted-foreground">No {filter} requests.</p>
+      {loading ? (
+        <InlineLoader message="Loading requests…" />
+      ) : (
+        <>
+          {error && <p className="text-sm text-destructive">{error}</p>}
+          {requests.length === 0 && (
+            <p className="text-sm text-muted-foreground">No {filter} requests.</p>
+          )}
+        </>
       )}
       <div className="flex flex-col gap-3">
         {requests.map((r) => (

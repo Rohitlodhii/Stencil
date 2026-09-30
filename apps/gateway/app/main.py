@@ -5,12 +5,12 @@
              -> exam backend   (default http://localhost:8001)
   /scanner/* -> sheet-scanner  (default http://localhost:8000, prefix stripped)
 
-Desktop app should talk ONLY to this gateway (default http://localhost:8080).
+Desktop app should talk ONLY to this gateway (default http://localhost:8090).
 
 Run:
   cd apps/gateway
-  uv run uvicorn app.main:app --reload --port 8080
-Docs: http://localhost:8080/docs
+  uv run uvicorn app.main:app --reload --port 8090
+Docs: http://localhost:8090/docs
 """
 
 from __future__ import annotations

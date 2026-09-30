@@ -1,9 +1,11 @@
 import { useCallback, useState } from "react";
 import { HashRouter, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { AnimatePresence, motion } from "motion/react";
+import { Suspense } from "react";
 import { TitleBar } from "@/components/TitleBar";
 import { AuthHeader } from "@/components/AuthLayout";
 import { AppSidebar } from "@/components/AppSidebar";
+import { PageLoader, PageTransition, RouteProgress } from "@/components/loading";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { HomePage } from "@/pages/HomePage";
 import { ScannerPage } from "@/pages/ScannerPage";
@@ -20,6 +22,7 @@ import { TeacherDashboardPage } from "@/pages/TeacherDashboardPage";
 import { CheckExamsPage } from "@/pages/CheckExamsPage";
 import { CheckExamDetailPage } from "@/pages/CheckExamDetailPage";
 import { CheckPaperPage } from "@/pages/CheckPaperPage";
+import { AnswerSheetAnalysisPage } from "@/pages/AnswerSheetAnalysisPage";
 import { clearSession, loadSession, type Session } from "@/lib/auth";
 
 function AuthedShell({
@@ -30,39 +33,48 @@ function AuthedShell({
   onLogout: () => void;
 }) {
   const role = session.user.role;
+  const location = useLocation();
   return (
     <div className="flex h-screen w-full flex-col overflow-hidden bg-background text-foreground">
       <TitleBar />
       <div className="flex min-h-0 flex-1">
         <AppSidebar session={session} onLogout={onLogout} />
-        <div className="flex min-w-0 flex-1 flex-col overflow-y-auto">
-          <Routes>
-              {role === "coordinator" ? (
-                <>
-                  <Route path="/" element={<CoordinatorDashboardPage session={session} />} />
-                  <Route path="/home" element={<HomePage />} />
-                  <Route path="/exam" element={<ExamPage session={session} />} />
-                  <Route path="/teachers" element={<TeachersPage session={session} />} />
-                  <Route path="/students" element={<StudentsPage />} />
-                  <Route path="/students/new" element={<StudentsUploadPage session={session} />} />
-                  <Route path="/students/:id" element={<StudentsDetailPage />} />
-                  <Route path="/scanner" element={<Navigate to="/" replace />} />
-                  <Route path="/teacher" element={<Navigate to="/" replace />} />
-                  <Route path="*" element={<Navigate to="/" replace />} />
-                </>
-              ) : (
-                <>
-                  <Route path="/" element={<TeacherDashboardPage session={session} />} />
-                  <Route path="/teacher" element={<TeacherDashboardPage session={session} />} />
-                  <Route path="/check-exam" element={<CheckExamsPage session={session} />} />
-                  <Route path="/check-exam/:id" element={<CheckExamDetailPage />} />
-                  <Route path="/check-exam/:id/check/:studentIdx" element={<CheckPaperPage />} />
-                  <Route path="/exam" element={<Navigate to="/" replace />} />
-                  <Route path="/scanner" element={<ScannerPage />} />
-                  <Route path="*" element={<Navigate to="/" replace />} />
-                </>
-              )}
-            </Routes>
+        <div className="relative flex min-w-0 flex-1 flex-col overflow-y-auto">
+          <RouteProgress />
+          <AnimatePresence mode="wait">
+            <PageTransition routeKey={location.pathname}>
+              <Suspense fallback={<PageLoader message="Loading page…" />}>
+                <Routes location={location}>
+                  {role === "coordinator" ? (
+                    <>
+                      <Route path="/" element={<CoordinatorDashboardPage session={session} />} />
+                      <Route path="/home" element={<HomePage />} />
+                      <Route path="/exam" element={<ExamPage session={session} />} />
+                      <Route path="/teachers" element={<TeachersPage session={session} />} />
+                      <Route path="/students" element={<StudentsPage />} />
+                      <Route path="/students/new" element={<StudentsUploadPage session={session} />} />
+                      <Route path="/students/:id" element={<StudentsDetailPage />} />
+                      <Route path="/scanner" element={<Navigate to="/" replace />} />
+                      <Route path="/teacher" element={<Navigate to="/" replace />} />
+                      <Route path="*" element={<Navigate to="/" replace />} />
+                    </>
+                  ) : (
+                    <>
+                      <Route path="/" element={<TeacherDashboardPage session={session} />} />
+                      <Route path="/teacher" element={<TeacherDashboardPage session={session} />} />
+                      <Route path="/check-exam" element={<CheckExamsPage session={session} />} />
+                      <Route path="/check-exam/:id" element={<CheckExamDetailPage />} />
+                      <Route path="/check-exam/:id/check/:studentIdx" element={<CheckPaperPage />} />
+                      <Route path="/check-exam/:id/check/:studentIdx/analysis" element={<AnswerSheetAnalysisPage />} />
+                      <Route path="/exam" element={<Navigate to="/" replace />} />
+                      <Route path="/scanner" element={<ScannerPage />} />
+                      <Route path="*" element={<Navigate to="/" replace />} />
+                    </>
+                  )}
+                </Routes>
+              </Suspense>
+            </PageTransition>
+          </AnimatePresence>
         </div>
       </div>
     </div>
@@ -93,12 +105,14 @@ function PublicShell({ onLogin }: { onLogin: () => void }) {
             transition={{ duration: 0.25, ease: "easeOut" }}
             className="w-full max-w-md"
           >
-            <Routes location={location}>
-              <Route path="/" element={<OnboardingPage />} />
-              <Route path="/login/coordinator" element={<CoordinatorLoginPage onLogin={onLogin} />} />
-              <Route path="/login/teacher" element={<TeacherAuthPage onLogin={onLogin} />} />
-              <Route path="*" element={<Navigate to="/" replace />} />
-            </Routes>
+            <Suspense fallback={<PageLoader message="Loading…" />}>
+              <Routes location={location}>
+                <Route path="/" element={<OnboardingPage />} />
+                <Route path="/login/coordinator" element={<CoordinatorLoginPage onLogin={onLogin} />} />
+                <Route path="/login/teacher" element={<TeacherAuthPage onLogin={onLogin} />} />
+                <Route path="*" element={<Navigate to="/" replace />} />
+              </Routes>
+            </Suspense>
           </motion.div>
         </AnimatePresence>
       </div>

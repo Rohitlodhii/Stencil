@@ -1,4 +1,4 @@
-# Gateway (`:8080`)
+# Gateway (`:8090`)
 
 Single entrypoint for the desktop app. Routes by path:
 
@@ -10,10 +10,10 @@ Single entrypoint for the desktop app. Routes by path:
 
 ```bash
 cd apps/gateway
-uv run uvicorn app.main:app --reload --port 8080
-# docs: http://localhost:8080/docs — health: http://localhost:8080/health
+  uv run uvicorn app.main:app --reload --port 8090
+# docs: http://localhost:8090/docs — health: http://localhost:8090/health
 ```
 
 Full local stack: scanner `:8000` + exam `:8001` + auth `:8002` + gateway
-`:8080`, or `pnpm dev` from the repo root (scanner + auth-service + gateway +
+`:8090`, or `pnpm dev` from the repo root (scanner + auth-service + gateway +
 desktop).

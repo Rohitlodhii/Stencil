@@ -77,6 +77,8 @@ export type FinalExam = {
   assigned_teacher: string;
   student_dataset_id: number | null;
   student_label: string;
+  is_released: boolean;
+  released_at: string | null;
   created_at: string;
 };
 
@@ -343,6 +345,8 @@ export type FinalExamDetail = {
   assigned_teacher: string;
   student_dataset_id: number | null;
   student_label: string;
+  is_released: boolean;
+  released_at: string | null;
   created_at: string;
 };
 
@@ -460,7 +464,21 @@ export async function fetchFinalExamDetail(id: number): Promise<FinalExamDetail>
       typeof detail === "string" ? detail : JSON.stringify(detail),
     );
   }
-  return res.json() as Promise<FinalExamDetail>;
+  const body = (await res.json()) as FinalExamDetail;
+  // Back-compat: older backends don't send release fields yet.
+  return {
+    ...body,
+    is_released: (body as { is_released?: boolean }).is_released ?? false,
+    released_at: (body as { released_at?: string | null }).released_at ?? null,
+  };
+}
+
+async function normalizeFinalExams(body: { exams?: FinalExam[] }): Promise<FinalExam[]> {
+  return (body.exams ?? []).map((e) => ({
+    ...e,
+    is_released: (e as { is_released?: boolean }).is_released ?? false,
+    released_at: (e as { released_at?: string | null }).released_at ?? null,
+  }));
 }
 
 export async function fetchFinalExams(teacher = ""): Promise<FinalExam[]> {
@@ -476,7 +494,94 @@ export async function fetchFinalExams(teacher = ""): Promise<FinalExam[]> {
     );
   }
   const body = await res.json();
-  return (body.exams ?? []) as FinalExam[];
+  return normalizeFinalExams(body);
+}
+
+export async function releaseFinalExam(id: number): Promise<{
+  id: number;
+  is_released: boolean;
+  released_at: string | null;
+}> {
+  const res = await fetch(`${API_URL}/exam/final/${id}/release`, { method: "POST" });
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    const detail = body?.detail ?? `Request failed with status ${res.status}`;
+    throw new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
+  }
+  return res.json();
+}
+
+export async function unreleaseFinalExam(id: number): Promise<{
+  id: number;
+  is_released: boolean;
+  released_at: string | null;
+}> {
+  const res = await fetch(`${API_URL}/exam/final/${id}/unrelease`, { method: "POST" });
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    const detail = body?.detail ?? `Request failed with status ${res.status}`;
+    throw new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
+  }
+  return res.json();
+}
+
+// ---- public results (no login required) ----
+
+export type ReleasedExam = {
+  id: number;
+  subject_name: string;
+  total_marks: number;
+  released_at: string | null;
+  student_label: string;
+  student_count: number;
+  unique_field: string;
+};
+
+export type ResultLookupSingle = {
+  match: "single";
+  search_column: string;
+  exam: { id: number; subject_name: string };
+  student: {
+    row_index: number;
+    unique_value: string;
+    student_name: string;
+    max_marks: number | null;
+    obtained_marks: number | null;
+    percentage: number | null;
+    updated_by_teacher: boolean;
+  };
+};
+
+export type ResultLookupCandidates = {
+  match: "candidates";
+  search_column: string;
+  total: number;
+  candidates: { row_index: number; student_name: string; [col: string]: string | number }[];
+};
+
+export type ResultLookup = ResultLookupSingle | ResultLookupCandidates;
+
+export async function fetchReleasedExams(): Promise<ReleasedExam[]> {
+  const res = await fetch(`${API_URL}/exam/results`);
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    const detail = body?.detail ?? `Request failed with status ${res.status}`;
+    throw new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
+  }
+  const body = await res.json();
+  return (body.exams ?? []) as ReleasedExam[];
+}
+
+export async function lookupReleasedResult(examId: number, q: string): Promise<ResultLookup> {
+  const res = await fetch(
+    `${API_URL}/exam/results/${examId}?q=${encodeURIComponent(q)}`,
+  );
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    const detail = body?.detail ?? `Request failed with status ${res.status}`;
+    throw new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
+  }
+  return (await res.json()) as ResultLookup;
 }
 
 export async function summarizeSyllabus(

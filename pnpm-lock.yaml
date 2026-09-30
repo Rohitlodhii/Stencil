@@ -267,15 +267,57 @@ importers:
 
   apps/web:
     dependencies:
+      '@hugeicons/core-free-icons':
+        specifier: ^4.3.5
+        version: 4.3.5
+      '@hugeicons/react':
+        specifier: ^1.1.10
+        version: 1.1.10(react@19.3.0)
+      '@mdxeditor/editor':
+        specifier: ^4.2.5
+        version: 4.2.5(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(supports-color@7.2.0)(typescript@5.9.3)(yjs@13.6.33)
+      '@radix-ui/react-slot':
+        specifier: ^1.3.3
+        version: 1.3.3(@types/react@19.3.0)(react@19.3.0)
+      class-variance-authority:
+        specifier: ^0.7.1
+        version: 0.7.1
+      clsx:
+        specifier: ^2.1.1
+        version: 2.1.1
+      lucide-react:
+        specifier: ^1.48.0
+        version: 1.48.0(react@19.3.0)
+      motion:
+        specifier: ^13.4.3
+        version: 13.4.3(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       next:
         specifier: ^15.5.4
         version: 15.5.26(@types/node@24.13.6)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+      radix-ui:
+        specifier: ^1.6.7
+        version: 1.6.7(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       react:
-        specifier: ^19.1.1
+        specifier: ^19.1.0
         version: 19.3.0
       react-dom:
-        specifier: ^19.1.1
+        specifier: ^19.1.0
         version: 19.3.0(react@19.3.0)
+      react-markdown:
+        specifier: ^10.1.0
+        version: 10.1.0(@types/react@19.3.0)(react@19.3.0)(supports-color@7.2.0)
+      react-router-dom:
+        specifier: ^7.18.4
+        version: 7.18.4(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+      remark-gfm:
+        specifier: ^4.0.1
+        version: 4.0.1(supports-color@7.2.0)
+      tailwind-merge:
+        specifier: ^3.7.0
+        version: 3.7.0
+      tw-animate-css:
+        specifier: ^1.4.0
+        version: 1.4.0
     devDependencies:
       '@eslint/eslintrc':
         specifier: ^3.3.1
@@ -4750,6 +4792,14 @@ snapshots:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.6.0
 
+  '@lexical/a11y@0.48.0(typescript@5.9.3)':
+    dependencies:
+      '@lexical/extension': 0.48.0(typescript@5.9.3)
+      '@lexical/utils': 0.48.0(typescript@5.9.3)
+      lexical: 0.48.0(typescript@5.9.3)
+    optionalDependencies:
+      typescript: 5.9.3
+
   '@lexical/a11y@0.48.0(typescript@6.0.3)':
     dependencies:
       '@lexical/extension': 0.48.0(typescript@6.0.3)
@@ -4757,6 +4807,19 @@ snapshots:
       lexical: 0.48.0(typescript@6.0.3)
     optionalDependencies:
       typescript: 6.0.3
+
+  '@lexical/clipboard@0.48.0(typescript@5.9.3)':
+    dependencies:
+      '@lexical/extension': 0.48.0(typescript@5.9.3)
+      '@lexical/html': 0.48.0(typescript@5.9.3)
+      '@lexical/internal': 0.48.0(typescript@5.9.3)
+      '@lexical/list': 0.48.0(typescript@5.9.3)
+      '@lexical/selection': 0.48.0(typescript@5.9.3)
+      '@lexical/utils': 0.48.0(typescript@5.9.3)
+      '@types/trusted-types': 2.0.7
+      lexical: 0.48.0(typescript@5.9.3)
+    optionalDependencies:
+      typescript: 5.9.3
 
   '@lexical/clipboard@0.48.0(typescript@6.0.3)':
     dependencies:
@@ -4771,6 +4834,16 @@ snapshots:
     optionalDependencies:
       typescript: 6.0.3
 
+  '@lexical/code-core@0.48.0(typescript@5.9.3)':
+    dependencies:
+      '@lexical/extension': 0.48.0(typescript@5.9.3)
+      '@lexical/html': 0.48.0(typescript@5.9.3)
+      '@lexical/internal': 0.48.0(typescript@5.9.3)
+      '@lexical/utils': 0.48.0(typescript@5.9.3)
+      lexical: 0.48.0(typescript@5.9.3)
+    optionalDependencies:
+      typescript: 5.9.3
+
   '@lexical/code-core@0.48.0(typescript@6.0.3)':
     dependencies:
       '@lexical/extension': 0.48.0(typescript@6.0.3)
@@ -4780,6 +4853,19 @@ snapshots:
       lexical: 0.48.0(typescript@6.0.3)
     optionalDependencies:
       typescript: 6.0.3
+
+  '@lexical/devtools-core@0.48.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(typescript@5.9.3)':
+    dependencies:
+      '@lexical/html': 0.48.0(typescript@5.9.3)
+      '@lexical/link': 0.48.0(typescript@5.9.3)
+      '@lexical/mark': 0.48.0(typescript@5.9.3)
+      '@lexical/table': 0.48.0(typescript@5.9.3)
+      '@lexical/utils': 0.48.0(typescript@5.9.3)
+      lexical: 0.48.0(typescript@5.9.3)
+      react: 19.3.0
+      react-dom: 19.3.0(react@19.3.0)
+    optionalDependencies:
+      typescript: 5.9.3
 
   '@lexical/devtools-core@0.48.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(typescript@6.0.3)':
     dependencies:
@@ -4794,12 +4880,28 @@ snapshots:
     optionalDependencies:
       typescript: 6.0.3
 
+  '@lexical/dragon@0.48.0(typescript@5.9.3)':
+    dependencies:
+      '@lexical/extension': 0.48.0(typescript@5.9.3)
+      lexical: 0.48.0(typescript@5.9.3)
+    optionalDependencies:
+      typescript: 5.9.3
+
   '@lexical/dragon@0.48.0(typescript@6.0.3)':
     dependencies:
       '@lexical/extension': 0.48.0(typescript@6.0.3)
       lexical: 0.48.0(typescript@6.0.3)
     optionalDependencies:
       typescript: 6.0.3
+
+  '@lexical/extension@0.48.0(typescript@5.9.3)':
+    dependencies:
+      '@lexical/internal': 0.48.0(typescript@5.9.3)
+      '@lexical/utils': 0.48.0(typescript@5.9.3)
+      '@preact/signals-core': 1.14.4
+      lexical: 0.48.0(typescript@5.9.3)
+    optionalDependencies:
+      typescript: 5.9.3
 
   '@lexical/extension@0.48.0(typescript@6.0.3)':
     dependencies:
@@ -4810,6 +4912,14 @@ snapshots:
     optionalDependencies:
       typescript: 6.0.3
 
+  '@lexical/hashtag@0.48.0(typescript@5.9.3)':
+    dependencies:
+      '@lexical/text': 0.48.0(typescript@5.9.3)
+      '@lexical/utils': 0.48.0(typescript@5.9.3)
+      lexical: 0.48.0(typescript@5.9.3)
+    optionalDependencies:
+      typescript: 5.9.3
+
   '@lexical/hashtag@0.48.0(typescript@6.0.3)':
     dependencies:
       '@lexical/text': 0.48.0(typescript@6.0.3)
@@ -4818,6 +4928,14 @@ snapshots:
     optionalDependencies:
       typescript: 6.0.3
 
+  '@lexical/history@0.48.0(typescript@5.9.3)':
+    dependencies:
+      '@lexical/extension': 0.48.0(typescript@5.9.3)
+      '@lexical/utils': 0.48.0(typescript@5.9.3)
+      lexical: 0.48.0(typescript@5.9.3)
+    optionalDependencies:
+      typescript: 5.9.3
+
   '@lexical/history@0.48.0(typescript@6.0.3)':
     dependencies:
       '@lexical/extension': 0.48.0(typescript@6.0.3)
@@ -4825,6 +4943,16 @@ snapshots:
       lexical: 0.48.0(typescript@6.0.3)
     optionalDependencies:
       typescript: 6.0.3
+
+  '@lexical/html@0.48.0(typescript@5.9.3)':
+    dependencies:
+      '@lexical/extension': 0.48.0(typescript@5.9.3)
+      '@lexical/internal': 0.48.0(typescript@5.9.3)
+      '@lexical/selection': 0.48.0(typescript@5.9.3)
+      '@lexical/utils': 0.48.0(typescript@5.9.3)
+      lexical: 0.48.0(typescript@5.9.3)
+    optionalDependencies:
+      typescript: 5.9.3
 
   '@lexical/html@0.48.0(typescript@6.0.3)':
     dependencies:
@@ -4836,9 +4964,23 @@ snapshots:
     optionalDependencies:
       typescript: 6.0.3
 
+  '@lexical/internal@0.48.0(typescript@5.9.3)':
+    optionalDependencies:
+      typescript: 5.9.3
+
   '@lexical/internal@0.48.0(typescript@6.0.3)':
     optionalDependencies:
       typescript: 6.0.3
+
+  '@lexical/link@0.48.0(typescript@5.9.3)':
+    dependencies:
+      '@lexical/extension': 0.48.0(typescript@5.9.3)
+      '@lexical/html': 0.48.0(typescript@5.9.3)
+      '@lexical/internal': 0.48.0(typescript@5.9.3)
+      '@lexical/utils': 0.48.0(typescript@5.9.3)
+      lexical: 0.48.0(typescript@5.9.3)
+    optionalDependencies:
+      typescript: 5.9.3
 
   '@lexical/link@0.48.0(typescript@6.0.3)':
     dependencies:
@@ -4850,6 +4992,16 @@ snapshots:
     optionalDependencies:
       typescript: 6.0.3
 
+  '@lexical/list@0.48.0(typescript@5.9.3)':
+    dependencies:
+      '@lexical/extension': 0.48.0(typescript@5.9.3)
+      '@lexical/html': 0.48.0(typescript@5.9.3)
+      '@lexical/internal': 0.48.0(typescript@5.9.3)
+      '@lexical/utils': 0.48.0(typescript@5.9.3)
+      lexical: 0.48.0(typescript@5.9.3)
+    optionalDependencies:
+      typescript: 5.9.3
+
   '@lexical/list@0.48.0(typescript@6.0.3)':
     dependencies:
       '@lexical/extension': 0.48.0(typescript@6.0.3)
@@ -4860,12 +5012,33 @@ snapshots:
     optionalDependencies:
       typescript: 6.0.3
 
+  '@lexical/mark@0.48.0(typescript@5.9.3)':
+    dependencies:
+      '@lexical/utils': 0.48.0(typescript@5.9.3)
+      lexical: 0.48.0(typescript@5.9.3)
+    optionalDependencies:
+      typescript: 5.9.3
+
   '@lexical/mark@0.48.0(typescript@6.0.3)':
     dependencies:
       '@lexical/utils': 0.48.0(typescript@6.0.3)
       lexical: 0.48.0(typescript@6.0.3)
     optionalDependencies:
       typescript: 6.0.3
+
+  '@lexical/markdown@0.48.0(typescript@5.9.3)':
+    dependencies:
+      '@lexical/code-core': 0.48.0(typescript@5.9.3)
+      '@lexical/internal': 0.48.0(typescript@5.9.3)
+      '@lexical/link': 0.48.0(typescript@5.9.3)
+      '@lexical/list': 0.48.0(typescript@5.9.3)
+      '@lexical/rich-text': 0.48.0(typescript@5.9.3)
+      '@lexical/selection': 0.48.0(typescript@5.9.3)
+      '@lexical/text': 0.48.0(typescript@5.9.3)
+      '@lexical/utils': 0.48.0(typescript@5.9.3)
+      lexical: 0.48.0(typescript@5.9.3)
+    optionalDependencies:
+      typescript: 5.9.3
 
   '@lexical/markdown@0.48.0(typescript@6.0.3)':
     dependencies:
@@ -4881,11 +5054,28 @@ snapshots:
     optionalDependencies:
       typescript: 6.0.3
 
+  '@lexical/overflow@0.48.0(typescript@5.9.3)':
+    dependencies:
+      lexical: 0.48.0(typescript@5.9.3)
+    optionalDependencies:
+      typescript: 5.9.3
+
   '@lexical/overflow@0.48.0(typescript@6.0.3)':
     dependencies:
       lexical: 0.48.0(typescript@6.0.3)
     optionalDependencies:
       typescript: 6.0.3
+
+  '@lexical/plain-text@0.48.0(typescript@5.9.3)':
+    dependencies:
+      '@lexical/clipboard': 0.48.0(typescript@5.9.3)
+      '@lexical/dragon': 0.48.0(typescript@5.9.3)
+      '@lexical/extension': 0.48.0(typescript@5.9.3)
+      '@lexical/selection': 0.48.0(typescript@5.9.3)
+      '@lexical/utils': 0.48.0(typescript@5.9.3)
+      lexical: 0.48.0(typescript@5.9.3)
+    optionalDependencies:
+      typescript: 5.9.3
 
   '@lexical/plain-text@0.48.0(typescript@6.0.3)':
     dependencies:
@@ -4897,6 +5087,34 @@ snapshots:
       lexical: 0.48.0(typescript@6.0.3)
     optionalDependencies:
       typescript: 6.0.3
+
+  '@lexical/react@0.48.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(typescript@5.9.3)(yjs@13.6.33)':
+    dependencies:
+      '@floating-ui/react': 0.27.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+      '@lexical/a11y': 0.48.0(typescript@5.9.3)
+      '@lexical/devtools-core': 0.48.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(typescript@5.9.3)
+      '@lexical/dragon': 0.48.0(typescript@5.9.3)
+      '@lexical/extension': 0.48.0(typescript@5.9.3)
+      '@lexical/hashtag': 0.48.0(typescript@5.9.3)
+      '@lexical/history': 0.48.0(typescript@5.9.3)
+      '@lexical/internal': 0.48.0(typescript@5.9.3)
+      '@lexical/link': 0.48.0(typescript@5.9.3)
+      '@lexical/list': 0.48.0(typescript@5.9.3)
+      '@lexical/mark': 0.48.0(typescript@5.9.3)
+      '@lexical/markdown': 0.48.0(typescript@5.9.3)
+      '@lexical/overflow': 0.48.0(typescript@5.9.3)
+      '@lexical/plain-text': 0.48.0(typescript@5.9.3)
+      '@lexical/rich-text': 0.48.0(typescript@5.9.3)
+      '@lexical/table': 0.48.0(typescript@5.9.3)
+      '@lexical/text': 0.48.0(typescript@5.9.3)
+      '@lexical/utils': 0.48.0(typescript@5.9.3)
+      '@lexical/yjs': 0.48.0(typescript@5.9.3)(yjs@13.6.33)
+      lexical: 0.48.0(typescript@5.9.3)
+      react: 19.3.0
+      react-dom: 19.3.0(react@19.3.0)
+    optionalDependencies:
+      typescript: 5.9.3
+      yjs: 13.6.33
 
   '@lexical/react@0.48.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(typescript@6.0.3)(yjs@13.6.33)':
     dependencies:
@@ -4926,6 +5144,18 @@ snapshots:
       typescript: 6.0.3
       yjs: 13.6.33
 
+  '@lexical/rich-text@0.48.0(typescript@5.9.3)':
+    dependencies:
+      '@lexical/clipboard': 0.48.0(typescript@5.9.3)
+      '@lexical/dragon': 0.48.0(typescript@5.9.3)
+      '@lexical/extension': 0.48.0(typescript@5.9.3)
+      '@lexical/html': 0.48.0(typescript@5.9.3)
+      '@lexical/selection': 0.48.0(typescript@5.9.3)
+      '@lexical/utils': 0.48.0(typescript@5.9.3)
+      lexical: 0.48.0(typescript@5.9.3)
+    optionalDependencies:
+      typescript: 5.9.3
+
   '@lexical/rich-text@0.48.0(typescript@6.0.3)':
     dependencies:
       '@lexical/clipboard': 0.48.0(typescript@6.0.3)
@@ -4938,12 +5168,30 @@ snapshots:
     optionalDependencies:
       typescript: 6.0.3
 
+  '@lexical/selection@0.48.0(typescript@5.9.3)':
+    dependencies:
+      '@lexical/internal': 0.48.0(typescript@5.9.3)
+      lexical: 0.48.0(typescript@5.9.3)
+    optionalDependencies:
+      typescript: 5.9.3
+
   '@lexical/selection@0.48.0(typescript@6.0.3)':
     dependencies:
       '@lexical/internal': 0.48.0(typescript@6.0.3)
       lexical: 0.48.0(typescript@6.0.3)
     optionalDependencies:
       typescript: 6.0.3
+
+  '@lexical/table@0.48.0(typescript@5.9.3)':
+    dependencies:
+      '@lexical/clipboard': 0.48.0(typescript@5.9.3)
+      '@lexical/extension': 0.48.0(typescript@5.9.3)
+      '@lexical/html': 0.48.0(typescript@5.9.3)
+      '@lexical/internal': 0.48.0(typescript@5.9.3)
+      '@lexical/utils': 0.48.0(typescript@5.9.3)
+      lexical: 0.48.0(typescript@5.9.3)
+    optionalDependencies:
+      typescript: 5.9.3
 
   '@lexical/table@0.48.0(typescript@6.0.3)':
     dependencies:
@@ -4956,12 +5204,27 @@ snapshots:
     optionalDependencies:
       typescript: 6.0.3
 
+  '@lexical/text@0.48.0(typescript@5.9.3)':
+    dependencies:
+      '@lexical/internal': 0.48.0(typescript@5.9.3)
+      lexical: 0.48.0(typescript@5.9.3)
+    optionalDependencies:
+      typescript: 5.9.3
+
   '@lexical/text@0.48.0(typescript@6.0.3)':
     dependencies:
       '@lexical/internal': 0.48.0(typescript@6.0.3)
       lexical: 0.48.0(typescript@6.0.3)
     optionalDependencies:
       typescript: 6.0.3
+
+  '@lexical/utils@0.48.0(typescript@5.9.3)':
+    dependencies:
+      '@lexical/internal': 0.48.0(typescript@5.9.3)
+      '@lexical/selection': 0.48.0(typescript@5.9.3)
+      lexical: 0.48.0(typescript@5.9.3)
+    optionalDependencies:
+      typescript: 5.9.3
 
   '@lexical/utils@0.48.0(typescript@6.0.3)':
     dependencies:
@@ -4970,6 +5233,15 @@ snapshots:
       lexical: 0.48.0(typescript@6.0.3)
     optionalDependencies:
       typescript: 6.0.3
+
+  '@lexical/yjs@0.48.0(typescript@5.9.3)(yjs@13.6.33)':
+    dependencies:
+      '@lexical/internal': 0.48.0(typescript@5.9.3)
+      '@lexical/selection': 0.48.0(typescript@5.9.3)
+      lexical: 0.48.0(typescript@5.9.3)
+      yjs: 13.6.33
+    optionalDependencies:
+      typescript: 5.9.3
 
   '@lexical/yjs@0.48.0(typescript@6.0.3)(yjs@13.6.33)':
     dependencies:
@@ -5119,6 +5391,76 @@ snapshots:
       mdast-util-highlight-mark: 1.2.2
       mdast-util-mdx: 3.0.0(supports-color@8.1.1)
       mdast-util-mdx-jsx: 3.2.0(supports-color@8.1.1)
+      mdast-util-to-markdown: 2.1.2
+      micromark-extension-directive: 3.0.2
+      micromark-extension-frontmatter: 2.0.0
+      micromark-extension-gfm-strikethrough: 2.1.0
+      micromark-extension-gfm-table: 2.1.2
+      micromark-extension-gfm-task-list-item: 2.1.0
+      micromark-extension-highlight-mark: 1.2.0
+      micromark-extension-mdx-jsx: 3.0.2
+      micromark-extension-mdx-md: 2.0.0
+      micromark-extension-mdxjs: 3.0.0
+      micromark-factory-space: 2.0.1
+      micromark-util-character: 2.1.1
+      micromark-util-symbol: 2.0.1
+      react: 19.3.0
+      react-dom: 19.3.0(react@19.3.0)
+      react-hook-form: 7.88.0(react@19.3.0)
+      unidiff: 1.0.4
+    transitivePeerDependencies:
+      - '@codemirror/language'
+      - '@lezer/highlight'
+      - '@types/react'
+      - '@types/react-dom'
+      - supports-color
+      - typescript
+      - yjs
+
+  '@mdxeditor/editor@4.2.5(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(supports-color@7.2.0)(typescript@5.9.3)(yjs@13.6.33)':
+    dependencies:
+      '@codemirror/commands': 6.11.1
+      '@codemirror/lang-markdown': 6.5.2
+      '@codemirror/language-data': 6.5.2
+      '@codemirror/merge': 6.12.2
+      '@codemirror/state': 6.7.6
+      '@codemirror/view': 6.43.13
+      '@lexical/clipboard': 0.48.0(typescript@5.9.3)
+      '@lexical/extension': 0.48.0(typescript@5.9.3)
+      '@lexical/history': 0.48.0(typescript@5.9.3)
+      '@lexical/link': 0.48.0(typescript@5.9.3)
+      '@lexical/list': 0.48.0(typescript@5.9.3)
+      '@lexical/markdown': 0.48.0(typescript@5.9.3)
+      '@lexical/plain-text': 0.48.0(typescript@5.9.3)
+      '@lexical/react': 0.48.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(typescript@5.9.3)(yjs@13.6.33)
+      '@lexical/rich-text': 0.48.0(typescript@5.9.3)
+      '@lexical/selection': 0.48.0(typescript@5.9.3)
+      '@lexical/utils': 0.48.0(typescript@5.9.3)
+      '@mdxeditor/gurx': 1.2.4(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+      '@radix-ui/colors': 3.0.0
+      '@radix-ui/react-dialog': 1.1.23(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+      '@radix-ui/react-icons': 1.3.2(react@19.3.0)
+      '@radix-ui/react-popover': 1.1.23(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+      '@radix-ui/react-popper': 1.3.7(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+      '@radix-ui/react-select': 2.3.7(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+      '@radix-ui/react-toggle-group': 1.1.19(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+      '@radix-ui/react-toolbar': 1.1.19(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+      '@radix-ui/react-tooltip': 1.2.16(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+      classnames: 2.5.1
+      cm6-theme-basic-light: 0.2.0(@codemirror/language@6.12.4)(@codemirror/state@6.7.6)(@codemirror/view@6.43.13)(@lezer/highlight@1.2.4)
+      codemirror: 6.0.2
+      downshift: 7.6.2(react@19.3.0)
+      js-yaml: 4.3.2
+      lexical: 0.48.0(typescript@5.9.3)
+      mdast-util-directive: 3.1.0(supports-color@7.2.0)
+      mdast-util-from-markdown: 2.0.3(supports-color@7.2.0)
+      mdast-util-frontmatter: 2.0.1(supports-color@7.2.0)
+      mdast-util-gfm-strikethrough: 2.0.0(supports-color@7.2.0)
+      mdast-util-gfm-table: 2.0.0(supports-color@7.2.0)
+      mdast-util-gfm-task-list-item: 2.0.0(supports-color@7.2.0)
+      mdast-util-highlight-mark: 1.2.2
+      mdast-util-mdx: 3.0.0(supports-color@7.2.0)
+      mdast-util-mdx-jsx: 3.2.0(supports-color@7.2.0)
       mdast-util-to-markdown: 2.1.2
       micromark-extension-directive: 3.0.2
       micromark-extension-frontmatter: 2.0.0
@@ -7181,6 +7523,26 @@ snapshots:
     dependencies:
       function-bind: 1.1.2
 
+  hast-util-to-jsx-runtime@2.3.6(supports-color@7.2.0):
+    dependencies:
+      '@types/estree': 1.0.9
+      '@types/hast': 3.0.5
+      '@types/unist': 3.0.3
+      comma-separated-tokens: 2.0.3
+      devlop: 1.1.0
+      estree-util-is-identifier-name: 3.0.0
+      hast-util-whitespace: 3.0.0
+      mdast-util-mdx-expression: 2.0.1(supports-color@7.2.0)
+      mdast-util-mdx-jsx: 3.2.0(supports-color@7.2.0)
+      mdast-util-mdxjs-esm: 2.0.1(supports-color@7.2.0)
+      property-information: 7.2.0
+      space-separated-tokens: 2.0.2
+      style-to-js: 1.1.21
+      unist-util-position: 5.0.0
+      vfile-message: 4.0.3
+    transitivePeerDependencies:
+      - supports-color
+
   hast-util-to-jsx-runtime@2.3.6(supports-color@8.1.1):
     dependencies:
       '@types/estree': 1.0.9
@@ -7414,6 +7776,12 @@ snapshots:
       prelude-ls: 1.2.1
       type-check: 0.4.0
 
+  lexical@0.48.0(typescript@5.9.3):
+    dependencies:
+      '@lexical/internal': 0.48.0(typescript@5.9.3)
+    optionalDependencies:
+      typescript: 5.9.3
+
   lexical@0.48.0(typescript@6.0.3):
     dependencies:
       '@lexical/internal': 0.48.0(typescript@6.0.3)
@@ -7546,6 +7914,20 @@ snapshots:
 
   math-intrinsics@1.1.0: {}
 
+  mdast-util-directive@3.1.0(supports-color@7.2.0):
+    dependencies:
+      '@types/mdast': 4.0.4
+      '@types/unist': 3.0.3
+      ccount: 2.0.1
+      devlop: 1.1.0
+      mdast-util-from-markdown: 2.0.3(supports-color@7.2.0)
+      mdast-util-to-markdown: 2.1.2
+      parse-entities: 4.0.2
+      stringify-entities: 4.0.4
+      unist-util-visit-parents: 6.0.2
+    transitivePeerDependencies:
+      - supports-color
+
   mdast-util-directive@3.1.0(supports-color@8.1.1):
     dependencies:
       '@types/mdast': 4.0.4
@@ -7567,6 +7949,23 @@ snapshots:
       unist-util-is: 6.0.1
       unist-util-visit-parents: 6.0.2
 
+  mdast-util-from-markdown@2.0.3(supports-color@7.2.0):
+    dependencies:
+      '@types/mdast': 4.0.4
+      '@types/unist': 3.0.3
+      decode-named-character-reference: 1.3.0
+      devlop: 1.1.0
+      mdast-util-to-string: 4.0.0
+      micromark: 4.0.2(supports-color@7.2.0)
+      micromark-util-decode-numeric-character-reference: 2.0.2
+      micromark-util-decode-string: 2.0.1
+      micromark-util-normalize-identifier: 2.0.1
+      micromark-util-symbol: 2.0.1
+      micromark-util-types: 2.0.2
+      unist-util-stringify-position: 4.0.0
+    transitivePeerDependencies:
+      - supports-color
+
   mdast-util-from-markdown@2.0.3(supports-color@8.1.1):
     dependencies:
       '@types/mdast': 4.0.4
@@ -7581,6 +7980,17 @@ snapshots:
       micromark-util-symbol: 2.0.1
       micromark-util-types: 2.0.2
       unist-util-stringify-position: 4.0.0
+    transitivePeerDependencies:
+      - supports-color
+
+  mdast-util-frontmatter@2.0.1(supports-color@7.2.0):
+    dependencies:
+      '@types/mdast': 4.0.4
+      devlop: 1.1.0
+      escape-string-regexp: 5.0.0
+      mdast-util-from-markdown: 2.0.3(supports-color@7.2.0)
+      mdast-util-to-markdown: 2.1.2
+      micromark-extension-frontmatter: 2.0.0
     transitivePeerDependencies:
       - supports-color
 
@@ -7603,6 +8013,16 @@ snapshots:
       mdast-util-find-and-replace: 3.0.2
       micromark-util-character: 2.1.1
 
+  mdast-util-gfm-footnote@2.1.0(supports-color@7.2.0):
+    dependencies:
+      '@types/mdast': 4.0.4
+      devlop: 1.1.0
+      mdast-util-from-markdown: 2.0.3(supports-color@7.2.0)
+      mdast-util-to-markdown: 2.1.2
+      micromark-util-normalize-identifier: 2.0.1
+    transitivePeerDependencies:
+      - supports-color
+
   mdast-util-gfm-footnote@2.1.0(supports-color@8.1.1):
     dependencies:
       '@types/mdast': 4.0.4
@@ -7613,10 +8033,28 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
+  mdast-util-gfm-strikethrough@2.0.0(supports-color@7.2.0):
+    dependencies:
+      '@types/mdast': 4.0.4
+      mdast-util-from-markdown: 2.0.3(supports-color@7.2.0)
+      mdast-util-to-markdown: 2.1.2
+    transitivePeerDependencies:
+      - supports-color
+
   mdast-util-gfm-strikethrough@2.0.0(supports-color@8.1.1):
     dependencies:
       '@types/mdast': 4.0.4
       mdast-util-from-markdown: 2.0.3(supports-color@8.1.1)
+      mdast-util-to-markdown: 2.1.2
+    transitivePeerDependencies:
+      - supports-color
+
+  mdast-util-gfm-table@2.0.0(supports-color@7.2.0):
+    dependencies:
+      '@types/mdast': 4.0.4
+      devlop: 1.1.0
+      markdown-table: 3.0.4
+      mdast-util-from-markdown: 2.0.3(supports-color@7.2.0)
       mdast-util-to-markdown: 2.1.2
     transitivePeerDependencies:
       - supports-color
@@ -7631,11 +8069,32 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
+  mdast-util-gfm-task-list-item@2.0.0(supports-color@7.2.0):
+    dependencies:
+      '@types/mdast': 4.0.4
+      devlop: 1.1.0
+      mdast-util-from-markdown: 2.0.3(supports-color@7.2.0)
+      mdast-util-to-markdown: 2.1.2
+    transitivePeerDependencies:
+      - supports-color
+
   mdast-util-gfm-task-list-item@2.0.0(supports-color@8.1.1):
     dependencies:
       '@types/mdast': 4.0.4
       devlop: 1.1.0
       mdast-util-from-markdown: 2.0.3(supports-color@8.1.1)
+      mdast-util-to-markdown: 2.1.2
+    transitivePeerDependencies:
+      - supports-color
+
+  mdast-util-gfm@3.1.0(supports-color@7.2.0):
+    dependencies:
+      mdast-util-from-markdown: 2.0.3(supports-color@7.2.0)
+      mdast-util-gfm-autolink-literal: 2.0.1
+      mdast-util-gfm-footnote: 2.1.0(supports-color@7.2.0)
+      mdast-util-gfm-strikethrough: 2.0.0(supports-color@7.2.0)
+      mdast-util-gfm-table: 2.0.0(supports-color@7.2.0)
+      mdast-util-gfm-task-list-item: 2.0.0(supports-color@7.2.0)
       mdast-util-to-markdown: 2.1.2
     transitivePeerDependencies:
       - supports-color
@@ -7656,6 +8115,17 @@ snapshots:
     dependencies:
       micromark-extension-highlight-mark: 1.2.0
 
+  mdast-util-mdx-expression@2.0.1(supports-color@7.2.0):
+    dependencies:
+      '@types/estree-jsx': 1.0.5
+      '@types/hast': 3.0.5
+      '@types/mdast': 4.0.4
+      devlop: 1.1.0
+      mdast-util-from-markdown: 2.0.3(supports-color@7.2.0)
+      mdast-util-to-markdown: 2.1.2
+    transitivePeerDependencies:
+      - supports-color
+
   mdast-util-mdx-expression@2.0.1(supports-color@8.1.1):
     dependencies:
       '@types/estree-jsx': 1.0.5
@@ -7664,6 +8134,23 @@ snapshots:
       devlop: 1.1.0
       mdast-util-from-markdown: 2.0.3(supports-color@8.1.1)
       mdast-util-to-markdown: 2.1.2
+    transitivePeerDependencies:
+      - supports-color
+
+  mdast-util-mdx-jsx@3.2.0(supports-color@7.2.0):
+    dependencies:
+      '@types/estree-jsx': 1.0.5
+      '@types/hast': 3.0.5
+      '@types/mdast': 4.0.4
+      '@types/unist': 3.0.3
+      ccount: 2.0.1
+      devlop: 1.1.0
+      mdast-util-from-markdown: 2.0.3(supports-color@7.2.0)
+      mdast-util-to-markdown: 2.1.2
+      parse-entities: 4.0.2
+      stringify-entities: 4.0.4
+      unist-util-stringify-position: 4.0.0
+      vfile-message: 4.0.3
     transitivePeerDependencies:
       - supports-color
 
@@ -7684,12 +8171,33 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
+  mdast-util-mdx@3.0.0(supports-color@7.2.0):
+    dependencies:
+      mdast-util-from-markdown: 2.0.3(supports-color@7.2.0)
+      mdast-util-mdx-expression: 2.0.1(supports-color@7.2.0)
+      mdast-util-mdx-jsx: 3.2.0(supports-color@7.2.0)
+      mdast-util-mdxjs-esm: 2.0.1(supports-color@7.2.0)
+      mdast-util-to-markdown: 2.1.2
+    transitivePeerDependencies:
+      - supports-color
+
   mdast-util-mdx@3.0.0(supports-color@8.1.1):
     dependencies:
       mdast-util-from-markdown: 2.0.3(supports-color@8.1.1)
       mdast-util-mdx-expression: 2.0.1(supports-color@8.1.1)
       mdast-util-mdx-jsx: 3.2.0(supports-color@8.1.1)
       mdast-util-mdxjs-esm: 2.0.1(supports-color@8.1.1)
+      mdast-util-to-markdown: 2.1.2
+    transitivePeerDependencies:
+      - supports-color
+
+  mdast-util-mdxjs-esm@2.0.1(supports-color@7.2.0):
+    dependencies:
+      '@types/estree-jsx': 1.0.5
+      '@types/hast': 3.0.5
+      '@types/mdast': 4.0.4
+      devlop: 1.1.0
+      mdast-util-from-markdown: 2.0.3(supports-color@7.2.0)
       mdast-util-to-markdown: 2.1.2
     transitivePeerDependencies:
       - supports-color
@@ -8008,6 +8516,28 @@ snapshots:
 
   micromark-util-types@2.0.2: {}
 
+  micromark@4.0.2(supports-color@7.2.0):
+    dependencies:
+      '@types/debug': 4.1.13
+      debug: 4.4.3(supports-color@7.2.0)
+      decode-named-character-reference: 1.3.0
+      devlop: 1.1.0
+      micromark-core-commonmark: 2.0.3
+      micromark-factory-space: 2.0.1
+      micromark-util-character: 2.1.1
+      micromark-util-chunked: 2.0.1
+      micromark-util-combine-extensions: 2.0.1
+      micromark-util-decode-numeric-character-reference: 2.0.2
+      micromark-util-encode: 2.0.1
+      micromark-util-normalize-identifier: 2.0.1
+      micromark-util-resolve-all: 2.0.1
+      micromark-util-sanitize-uri: 2.0.1
+      micromark-util-subtokenize: 2.1.0
+      micromark-util-symbol: 2.0.1
+      micromark-util-types: 2.0.2
+    transitivePeerDependencies:
+      - supports-color
+
   micromark@4.0.2(supports-color@8.1.1):
     dependencies:
       '@types/debug': 4.1.13
@@ -8296,6 +8826,24 @@ snapshots:
 
   react-is@17.0.2: {}
 
+  react-markdown@10.1.0(@types/react@19.3.0)(react@19.3.0)(supports-color@7.2.0):
+    dependencies:
+      '@types/hast': 3.0.5
+      '@types/mdast': 4.0.4
+      '@types/react': 19.3.0
+      devlop: 1.1.0
+      hast-util-to-jsx-runtime: 2.3.6(supports-color@7.2.0)
+      html-url-attributes: 3.0.1
+      mdast-util-to-hast: 13.2.1
+      react: 19.3.0
+      remark-parse: 11.0.0(supports-color@7.2.0)
+      remark-rehype: 11.1.2
+      unified: 11.0.5
+      unist-util-visit: 5.1.0
+      vfile: 6.0.3
+    transitivePeerDependencies:
+      - supports-color
+
   react-markdown@10.1.0(@types/react@19.3.0)(react@19.3.0)(supports-color@8.1.1):
     dependencies:
       '@types/hast': 3.0.5
@@ -8377,6 +8925,17 @@ snapshots:
       gopd: 1.2.0
       set-function-name: 2.0.2
 
+  remark-gfm@4.0.1(supports-color@7.2.0):
+    dependencies:
+      '@types/mdast': 4.0.4
+      mdast-util-gfm: 3.1.0(supports-color@7.2.0)
+      micromark-extension-gfm: 3.0.0
+      remark-parse: 11.0.0(supports-color@7.2.0)
+      remark-stringify: 11.0.0
+      unified: 11.0.5
+    transitivePeerDependencies:
+      - supports-color
+
   remark-gfm@4.0.1(supports-color@8.1.1):
     dependencies:
       '@types/mdast': 4.0.4
@@ -8384,6 +8943,15 @@ snapshots:
       micromark-extension-gfm: 3.0.0
       remark-parse: 11.0.0(supports-color@8.1.1)
       remark-stringify: 11.0.0
+      unified: 11.0.5
+    transitivePeerDependencies:
+      - supports-color
+
+  remark-parse@11.0.0(supports-color@7.2.0):
+    dependencies:
+      '@types/mdast': 4.0.4
+      mdast-util-from-markdown: 2.0.3(supports-color@7.2.0)
+      micromark-util-types: 2.0.2
       unified: 11.0.5
     transitivePeerDependencies:
       - supports-color

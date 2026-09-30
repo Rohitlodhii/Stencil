@@ -2,8 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   ArrowLeft,
+  ArrowRight,
   FileUp,
-  Loader2,
   RefreshCw,
   Upload,
   X,
@@ -17,13 +17,11 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import {
-  fetchFinalExamDetail,
-  uploadImage,
-  type FinalExamDetail,
-  type UploadedImage,
-} from "@/lib/exam";
+import { fetchFinalExamDetail, type FinalExamDetail } from "@/lib/exam";
 import { fetchStudentDataset, fetchStudentRows } from "@/lib/students";
+import { setAnswerSheets, sheetKey } from "@/lib/answerSheets";
+import { fetchExamMarks } from "@/lib/marks";
+import { PageLoader } from "@/components/loading";
 
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 
@@ -36,15 +34,14 @@ export function CheckPaperPage() {
   const [exam, setExam] = useState<FinalExamDetail | null>(null);
   const [studentName, setStudentName] = useState("");
   const [obtained, setObtained] = useState("");
+  const [marksOverride, setMarksOverride] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // answer-sheet images
+  // answer-sheet images (kept local until Next — nothing is uploaded yet)
   const [files, setFiles] = useState<File[]>([]);
   const [dragging, setDragging] = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const [uploadError, setUploadError] = useState<string | null>(null);
-  const [uploaded, setUploaded] = useState<UploadedImage[]>([]);
+  const [pickError, setPickError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const load = useCallback(async () => {
@@ -71,6 +68,14 @@ export function CheckPaperPage() {
         (row[ds.mapping.student_name] ?? "").trim() || `Student ${rowIdx + 1}`,
       );
       setObtained((row[ds.mapping.obtained_marks] ?? "").trim());
+      // teacher-updated marks (from the Marks tab) override the CSV value
+      try {
+        const all = await fetchExamMarks(examId, ds.id);
+        const mine = all.find((m) => m.row_index === rowIdx);
+        setMarksOverride(mine ? mine.total_obtained : null);
+      } catch {
+        setMarksOverride(null);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load student.");
     } finally {
@@ -94,7 +99,7 @@ export function CheckPaperPage() {
   }, [previews]);
 
   const pickFiles = (picked: FileList | File[] | null | undefined) => {
-    setUploadError(null);
+    setPickError(null);
     if (!picked) return;
     const list = Array.from(picked);
     for (const f of list) {
@@ -102,11 +107,11 @@ export function CheckPaperPage() {
         f.type.startsWith("image/") ||
         /\.(jpe?g|png|webp|gif)$/i.test(f.name);
       if (!isImage) {
-        setUploadError(`Not an image: ${f.name}`);
+        setPickError(`Not an image: ${f.name}`);
         return;
       }
       if (f.size > MAX_IMAGE_BYTES) {
-        setUploadError(`${f.name} is larger than 10 MB.`);
+        setPickError(`${f.name} is larger than 10 MB.`);
         return;
       }
     }
@@ -117,29 +122,16 @@ export function CheckPaperPage() {
     setFiles((prev) => prev.filter((_, i) => i !== index));
   };
 
-  const onUpload = async () => {
+  const onNext = () => {
     if (files.length === 0) return;
-    setUploadError(null);
-    setUploading(true);
-    try {
-      const results: UploadedImage[] = [];
-      for (const f of files) {
-        results.push(await uploadImage(f));
-      }
-      setUploaded((prev) => [...prev, ...results]);
-      setFiles([]);
-      if (fileInputRef.current) fileInputRef.current.value = "";
-    } catch (err) {
-      setUploadError(err instanceof Error ? err.message : "Upload failed.");
-    } finally {
-      setUploading(false);
-    }
+    setAnswerSheets(sheetKey(examId, rowIdx), files);
+    navigate(`/check-exam/${examId}/check/${rowIdx}/analysis`);
   };
 
   if (loading) {
     return (
       <main className="mx-auto flex min-h-full w-full max-w-5xl flex-col gap-6 p-6">
-        <p className="text-sm text-muted-foreground">Loading student…</p>
+        <PageLoader message="Loading student…" />
       </main>
     );
   }
@@ -175,7 +167,7 @@ export function CheckPaperPage() {
         <h1 className="font-title text-3xl font-bold leading-none tracking-tight">
           Check paper — {studentName}
         </h1>
-        {obtained !== "" ? (
+        {marksOverride !== null || obtained !== "" ? (
           <Badge className="bg-green-600 text-white">Checked: True</Badge>
         ) : (
           <Badge variant="destructive">Checked: False</Badge>
@@ -192,7 +184,7 @@ export function CheckPaperPage() {
       </div>
       <p className="text-sm text-muted-foreground">
         {exam.subject_name} · {exam.assigned_teacher || "—"} · Marks obtained:{" "}
-        {obtained || "—"}
+        {marksOverride !== null ? String(marksOverride) : obtained || "—"}
       </p>
 
       <Card className="border-0 bg-sidebar shadow-none">
@@ -202,8 +194,8 @@ export function CheckPaperPage() {
             Answer sheet images
           </CardTitle>
           <CardDescription>
-            Upload photos/scans of {studentName}&rsquo;s answer sheet — each
-            image goes to S3 and appears below.
+            Drop photos/scans of {studentName}&rsquo;s answer sheet here, then
+            press Next to check them with AI.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
@@ -286,54 +278,20 @@ export function CheckPaperPage() {
                 </Button>
                 <Button
                   type="button"
-                  onClick={onUpload}
-                  disabled={uploading}
+                  onClick={onNext}
                   className="cursor-pointer p-1 pr-4"
                 >
                   <span className="flex h-full aspect-square items-center justify-center rounded-sm bg-secondary p-1 text-secondary-foreground">
-                    {uploading ? (
-                      <Loader2 className="size-4 animate-spin" />
-                    ) : (
-                      <Upload className="size-4" />
-                    )}
+                    <ArrowRight className="size-4" />
                   </span>
-                  {uploading ? "Uploading…" : `Upload ${files.length} image${files.length > 1 ? "s" : ""}`}
+                  Next
                 </Button>
               </div>
             </div>
           )}
 
-          {uploadError && (
-            <p className="text-sm text-destructive">{uploadError}</p>
-          )}
-
-          {uploaded.length > 0 && (
-            <div className="flex flex-col gap-2">
-              <p className="text-sm font-medium">
-                Uploaded ({uploaded.length})
-              </p>
-              <div className="grid gap-3 sm:grid-cols-3">
-                {uploaded.map((u, i) => (
-                  <a
-                    key={`${u.key}-${i}`}
-                    href={u.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="group overflow-hidden rounded-md border bg-background"
-                  >
-                    <img
-                      src={u.url}
-                      alt={`Uploaded answer sheet ${i + 1}`}
-                      loading="lazy"
-                      className="aspect-[3/4] w-full object-cover transition-transform group-hover:scale-[1.02]"
-                    />
-                    <span className="block truncate px-2 py-1 text-xs text-muted-foreground">
-                      Sheet {i + 1} · click to open
-                    </span>
-                  </a>
-                ))}
-              </div>
-            </div>
+          {pickError && (
+            <p className="text-sm text-destructive">{pickError}</p>
           )}
         </CardContent>
       </Card>

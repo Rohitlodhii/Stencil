@@ -9,7 +9,7 @@
 export const AUTH_URL =
   import.meta.env.VITE_AUTH_URL ??
   import.meta.env.VITE_GATEWAY_URL ??
-  "http://localhost:8080";
+  "http://localhost:8090";
 
 export type Role = "coordinator" | "teacher";
 

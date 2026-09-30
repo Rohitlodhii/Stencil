@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Check, CodeXml, Eye, FilePlus2, FileText, Loader2, Pencil, Upload, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { InlineLoader } from "@/components/loading";
 import { Kbd } from "@/components/ui/kbd";
 import {
   Sheet,
@@ -17,10 +18,20 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import {
+  analyzeCanonicalPaper,
   analyzeQuestionPaper,
+  canonicalToQp,
+  confirmCanonicalExam,
   createFinalExam,
+  fetchCanonicalAnalysis,
+  fetchCanonicalPages,
+  fetchCanonicalQuestions,
+  patchCanonicalQuestion,
   saveExamSummary,
   summarizeSyllabus,
+  type CanonicalAnalysis,
+  type CanonicalPageEntry,
+  type CanonicalQuestion,
   type FinalExamCreated,
   type QPQuestion,
   type QuestionPaperResult,
@@ -192,6 +203,20 @@ export function ExamView({ token }: { token?: string }) {
   const [finalCreated, setFinalCreated] =
     useState<FinalExamCreated | null>(null);
 
+  // ---- Stencil canonical pipeline state (page-aware JSON) ----
+  const [stencilExamId, setStencilExamId] = useState<string | null>(null);
+  const [stencilAnalysis, setStencilAnalysis] =
+    useState<CanonicalAnalysis | null>(null);
+  const [stencilQuestions, setStencilQuestions] = useState<CanonicalQuestion[]>(
+    [],
+  );
+  const [stencilPages, setStencilPages] = useState<CanonicalPageEntry[]>([]);
+  const [stencilRanges, setStencilRanges] = useState<
+    { question_number: string; pages: number[] }[]
+  >([]);
+  const [confirming, setConfirming] = useState(false);
+  const [qpProgress, setQpProgress] = useState<string | null>(null);
+
   const MAX_PDF_BYTES = 5 * 1024 * 1024;
   const MAX_QP_BYTES = 10 * 1024 * 1024;
 
@@ -239,6 +264,12 @@ export function ExamView({ token }: { token?: string }) {
     setSyllabusCached(false);
     setQpCached(false);
     setQpEditing(false);
+    setStencilExamId(null);
+    setStencilAnalysis(null);
+    setStencilQuestions([]);
+    setStencilPages([]);
+    setStencilRanges([]);
+    setQpProgress(null);
     if (qpInputRef.current) qpInputRef.current.value = "";
   };
 
@@ -357,24 +388,122 @@ export function ExamView({ token }: { token?: string }) {
     setError(null);
     setQpResult(null);
     setQpCached(false);
+    setStencilAnalysis(null);
+    setStencilQuestions([]);
+    setStencilPages([]);
+    setStencilRanges([]);
+    setStencilExamId(null);
     setQpLoading(true);
+    setQpProgress("Uploading PDF…");
     try {
-      // same file as before? reuse the previous AI result, skip S3 + AI.
+      // Stencil canonical pipeline: PDF -> page analysis -> manifest ->
+      // boundary resolution -> targeted extraction -> validation.
       const hash = await hashFile(qpFile);
-      const hit = getCached<QuestionPaperResult>("question-paper", hash, qpFile.name);
-      const res = hit
-        ? hit.result
-        : await analyzeQuestionPaper(qpFile, saved.name);
-      if (!hit) setCached("question-paper", qpFile, hash, res);
-      else setQpCached(true);
+      const hit = getCached<QuestionPaperResult>(
+        "question-paper",
+        hash,
+        qpFile.name,
+      );
+      if (hit) {
+        // cached legacy result (pre-canonical analysis)
+        const res = hit.result;
+        setQpCached(true);
+        setQpEditing(false);
+        setQpResult(res);
+        setQpSubject(res.subject_name || saved.name);
+        setQpTotalMarks(String(res.total_marks ?? 0));
+        setQpTotalQ(String(res.total_questions || res.questions.length));
+        setQpQuestions((res.questions ?? []).map(normalizeQ));
+        return;
+      }
+      const started = await analyzeCanonicalPaper(qpFile, saved.name);
+      // Background pipeline: poll until it reaches a terminal state so the
+      // UI shows live progress instead of one endless spinner.
+      const TERMINAL = new Set([
+        "NEEDS_REVIEW",
+        "READY_FOR_EVALUATION",
+        "FAILED",
+      ]);
+      let analysis = await fetchCanonicalAnalysis(started.exam_id);
+      for (let i = 0; i < 300 && !TERMINAL.has(analysis.status); i++) {
+        const done = analysis.progress?.done_pages ?? 0;
+        const total = analysis.progress?.total_pages ?? 0;
+        setQpProgress(
+          total > 0
+            ? `${analysis.status} — page ${done}/${total}…`
+            : `${analysis.status}…`,
+        );
+        await new Promise((r) => setTimeout(r, 2000));
+        analysis = await fetchCanonicalAnalysis(started.exam_id);
+      }
+      setQpProgress(null);
+      if (!TERMINAL.has(analysis.status)) {
+        throw new Error(
+          "Analysis is taking too long — it is still running on the server. Try again in a minute.",
+        );
+      }
+      if (analysis.status === "FAILED") {
+        throw new Error(
+          analysis.error || "AI analysis failed on the server.",
+        );
+      }
+      const [qdata, pdata] = await Promise.all([
+        fetchCanonicalQuestions(started.exam_id),
+        fetchCanonicalPages(started.exam_id),
+      ]);
+      setStencilExamId(started.exam_id);
+      setStencilAnalysis(analysis);
+      setStencilQuestions(qdata.questions ?? []);
+      setStencilPages(pdata.pages ?? []);
+      setStencilRanges(pdata.ranges ?? []);
+      // drive the existing review/edit + final-exam flow from canonical data
+      const qpQs = (qdata.questions ?? []).map(canonicalToQp).map(normalizeQ);
+      const pages = (pdata.pages ?? []).map((p) => ({
+        page: p.page_number,
+        url: p.image_url,
+        key: "",
+      }));
+      const res: QuestionPaperResult = {
+        model: "stencil-canonical",
+        subject_name: analysis.subject || saved.name,
+        total_marks: analysis.maximum_marks,
+        total_questions: analysis.detected_questions || qpQs.length,
+        questions: qpQs,
+        pages,
+      };
+      setCached("question-paper", qpFile, hash, res);
       setQpEditing(false);
       setQpResult(res);
       setQpSubject(res.subject_name || saved.name);
       setQpTotalMarks(String(res.total_marks ?? 0));
       setQpTotalQ(String(res.total_questions || res.questions.length));
-      setQpQuestions((res.questions ?? []).map(normalizeQ));
+      setQpQuestions(qpQs);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong.");
+      setQpProgress(null);
+      // fallback: legacy single-prompt extraction so a stencil outage
+      // never blocks coordinators
+      try {
+        if (qpFile) {
+          const res = await analyzeQuestionPaper(qpFile, saved?.name ?? "");
+          setQpEditing(false);
+          setQpResult(res);
+          setQpSubject(res.subject_name || saved?.name || "");
+          setQpTotalMarks(String(res.total_marks ?? 0));
+          setQpTotalQ(String(res.total_questions || res.questions.length));
+          setQpQuestions((res.questions ?? []).map(normalizeQ));
+          setError(
+            `Canonical analysis unavailable (${err instanceof Error ? err.message : "error"}); used legacy extraction.`,
+          );
+          return;
+        }
+        throw err;
+      } catch (fallbackErr) {
+        setError(
+          fallbackErr instanceof Error
+            ? fallbackErr.message
+            : "Something went wrong.",
+        );
+      }
     } finally {
       setQpLoading(false);
     }
@@ -458,13 +587,62 @@ export function ExamView({ token }: { token?: string }) {
 
   const saveEdit = () => {
     if (!editingPath) return;
+    const marks =
+      editDraft.marks === "" ? null : Number(editDraft.marks);
     updateQAt(editingPath, {
       q_no: editDraft.q_no,
       section: editDraft.section,
       text: editDraft.text,
-      marks: editDraft.marks === "" ? null : Number(editDraft.marks),
+      marks,
     });
+    // human correction flows back to the canonical exam (spec 19)
+    if (stencilExamId && editingPath.length === 1) {
+      const canon = stencilQuestions[editingPath[0]];
+      if (canon) {
+        const qid = canon.id || canon.question_number;
+        patchCanonicalQuestion(stencilExamId, qid, {
+          question_number: editDraft.q_no,
+          section_id: editDraft.section,
+          question_text: editDraft.text,
+          marks,
+        })
+          .then(() => fetchCanonicalAnalysis(stencilExamId))
+          .then(setStencilAnalysis)
+          .catch(() => {});
+        setStencilQuestions((qs) =>
+          qs.map((q, i) =>
+            i === editingPath[0]
+              ? {
+                  ...q,
+                  question_number: editDraft.q_no,
+                  section_id: editDraft.section,
+                  question_text: editDraft.text,
+                  marks,
+                }
+              : q,
+          ),
+        );
+      }
+    }
     setEditingPath(null);
+  };
+
+  const onAcceptPaper = async () => {
+    if (stencilExamId) {
+      setError(null);
+      setConfirming(true);
+      try {
+        await confirmCanonicalExam(stencilExamId);
+        const next = await fetchCanonicalAnalysis(stencilExamId);
+        setStencilAnalysis(next);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Could not confirm.");
+        setConfirming(false);
+        return;
+      }
+      setConfirming(false);
+    }
+    setQpAccepted(true);
   };
 
   const editingLabel = (): string => {
@@ -649,10 +827,10 @@ export function ExamView({ token }: { token?: string }) {
               </Button>
             </div>
             {loading && (
-              <p className="text-sm text-muted-foreground">
-                This can take a while: PDF → page images → S3 → AI analysis
-                per page → summary.
-              </p>
+              <InlineLoader
+                message="This can take a while: PDF → page images → S3 → AI analysis per page → summary."
+                className="justify-start py-2"
+              />
             )}
             {error && <p className="text-sm text-destructive">{error}</p>}
             </form>
@@ -880,10 +1058,13 @@ export function ExamView({ token }: { token?: string }) {
                   </Button>
                 </div>
                 {qpLoading && (
-                  <p className="text-sm text-muted-foreground">
-                    This can take a while: PDF → page images → S3 → AI reads
-                    each page with previous pages as context → merged structure.
-                  </p>
+                  <InlineLoader
+                    message={
+                      qpProgress ??
+                      "PDF → page images → S3 → per-page analysis → page manifest → boundary resolution → targeted question extraction → validation."
+                    }
+                    className="justify-start py-2"
+                  />
                 )}
                 {error && <p className="text-sm text-destructive">{error}</p>}
               </form>
@@ -901,10 +1082,15 @@ export function ExamView({ token }: { token?: string }) {
             >
               <div className="flex h-full w-full items-center gap-2">
                 <CardTitle className="font-title flex items-center text-sm font-bold tracking-tight">
-                  Check extracted paper
+                  QUESTION PAPER ANALYSIS
                   {qpCached && (
                     <span className="ml-2 rounded-md border px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">
                       Previous analysis
+                    </span>
+                  )}
+                  {stencilAnalysis && (
+                    <span className="ml-2 rounded-md border px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">
+                      {stencilAnalysis.status}
                     </span>
                   )}
                 </CardTitle>
@@ -954,21 +1140,9 @@ export function ExamView({ token }: { token?: string }) {
                 <div className="flex flex-col gap-5 text-sm">
                   <dl className="grid gap-x-8 gap-y-2 sm:grid-cols-2">
                     <div className="flex gap-2">
-                      <dt className="shrink-0 font-medium">Subject Name</dt>
+                      <dt className="shrink-0 font-medium">Subject</dt>
                       <dd className="text-muted-foreground">
                         – {qpSubject || "—"}
-                      </dd>
-                    </div>
-                    <div className="flex gap-2">
-                      <dt className="shrink-0 font-medium">Total Marks</dt>
-                      <dd className="text-muted-foreground">
-                        – {qpTotalMarks || "—"}
-                      </dd>
-                    </div>
-                    <div className="flex gap-2">
-                      <dt className="shrink-0 font-medium">Total Questions</dt>
-                      <dd className="text-muted-foreground">
-                        – {qpTotalQ || qpQuestions.length}
                       </dd>
                     </div>
                     <div className="flex gap-2">
@@ -977,22 +1151,150 @@ export function ExamView({ token }: { token?: string }) {
                         – {qpResult.pages.length}
                       </dd>
                     </div>
+                    <div className="flex gap-2">
+                      <dt className="shrink-0 font-medium">Detected Questions</dt>
+                      <dd className="text-muted-foreground">
+                        – {qpTotalQ || qpQuestions.length}
+                      </dd>
+                    </div>
+                    <div className="flex gap-2">
+                      <dt className="shrink-0 font-medium">Maximum Marks</dt>
+                      <dd className="text-muted-foreground">
+                        – {qpTotalMarks || "—"}
+                      </dd>
+                    </div>
                   </dl>
+                  {stencilAnalysis && (
+                    <div className="flex flex-col gap-1 text-sm">
+                      <p>
+                        {stencilAnalysis.validation?.marks_match ? "✓" : "✗"}{" "}
+                        Marks total{" "}
+                        {stencilAnalysis.validation?.marks_match
+                          ? "verified"
+                          : `mismatch (sum ${stencilAnalysis.validation?.marks_total})`}
+                      </p>
+                      <p>
+                        {stencilAnalysis.validation?.question_count_match
+                          ? "✓"
+                          : "✗"}{" "}
+                        Question count{" "}
+                        {stencilAnalysis.validation?.question_count_match
+                          ? "verified"
+                          : "mismatch"}
+                      </p>
+                      {(stencilAnalysis.validation?.issues ?? []).length >
+                        0 && (
+                        <ul className="list-disc pl-5 text-muted-foreground">
+                          {stencilAnalysis.validation.issues.map((iss, k) => (
+                            <li key={k}>{iss}</li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  )}
                   <div className="flex flex-col">
-                    {qpQuestions.map((q, i) => (
-                      <div
-                        key={i}
-                        className="border-t py-3 first:border-t-0 first:pt-0"
-                      >
-                        <QpPreviewNode q={q} depth={0} index={i} />
-                      </div>
-                    ))}
+                    {stencilQuestions.length > 0
+                      ? stencilQuestions.map((cq, i) => (
+                          <div
+                            key={cq.id || i}
+                            className="border-t py-3 first:border-t-0 first:pt-0"
+                          >
+                            <div className="flex items-baseline gap-2">
+                              <span className="font-semibold">
+                                Q{cq.question_number}
+                              </span>
+                              <span className="text-xs text-muted-foreground">
+                                {cq.marks ?? cq.total_marks ?? "—"} marks
+                                {cq.source?.pages?.length
+                                  ? ` · pages ${cq.source.pages.join(", ")}`
+                                  : ""}
+                                {cq.visual_context?.length
+                                  ? ` · ${cq.visual_context.length} visual(s)`
+                                  : ""}
+                                {cq.selection_rule
+                                  ? ` · ${cq.selection_rule.type} ${cq.selection_rule.count}`
+                                  : ""}
+                                {typeof cq.confidence?.overall === "number"
+                                  ? ` · conf ${cq.confidence.overall.toFixed(2)}`
+                                  : ""}
+                              </span>
+                            </div>
+                            <p className="leading-relaxed">
+                              {cq.question_text || "—"}
+                            </p>
+                            {cq.subquestions?.length > 0 && (
+                              <ul className="ml-5 list-disc text-muted-foreground">
+                                {cq.subquestions.map((s) => (
+                                  <li key={s.id}>
+                                    ({s.number}) {s.text}{" "}
+                                    {s.marks !== null && s.marks !== undefined
+                                      ? `— ${s.marks} marks`
+                                      : ""}
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
+                            {cq.alternatives?.length > 0 && (
+                              <p className="text-muted-foreground">
+                                OR:{" "}
+                                {cq.alternatives
+                                  .map(
+                                    (a) =>
+                                      `${a.label || "alt"}: ${a.text} (${a.marks ?? "—"} marks)`,
+                                  )
+                                  .join(" / ")}
+                              </p>
+                            )}
+                            {qpQuestions[i] && (
+                              <div className="mt-1">
+                                <QpPreviewNode
+                                  q={qpQuestions[i]}
+                                  depth={0}
+                                  index={i}
+                                />
+                              </div>
+                            )}
+                          </div>
+                        ))
+                      : qpQuestions.map((q, i) => (
+                          <div
+                            key={i}
+                            className="border-t py-3 first:border-t-0 first:pt-0"
+                          >
+                            <QpPreviewNode q={q} depth={0} index={i} />
+                          </div>
+                        ))}
                     {qpQuestions.length === 0 && (
                       <p className="text-muted-foreground">
                         No questions extracted.
                       </p>
                     )}
                   </div>
+                  {(stencilAnalysis?.warnings ?? []).length > 0 && (
+                    <div className="flex flex-col gap-1">
+                      <p className="font-medium">Warnings</p>
+                      <ul className="list-disc pl-5 text-muted-foreground">
+                        {stencilAnalysis!.warnings.map((w, k) => (
+                          <li key={k}>⚠ {w}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {stencilRanges.length > 0 && (
+                    <div className="flex flex-col gap-1">
+                      <p className="font-medium">
+                        Page map — question → pages ({stencilPages.length}{" "}
+                        pages analysed)
+                      </p>
+                      <ul className="list-disc pl-5 text-muted-foreground">
+                        {stencilRanges.map((r) => (
+                          <li key={r.question_number}>
+                            Q{r.question_number} → pages {r.pages.join(", ")}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="flex flex-col gap-4">
@@ -1161,6 +1463,11 @@ export function ExamView({ token }: { token?: string }) {
               variant="secondary"
               onClick={() => {
                 setQpResult(null);
+                setStencilExamId(null);
+                setStencilAnalysis(null);
+                setStencilQuestions([]);
+                setStencilPages([]);
+                setStencilRanges([]);
                 clearQpFile();
               }}
               className="cursor-pointer"
@@ -1169,14 +1476,18 @@ export function ExamView({ token }: { token?: string }) {
             </Button>
             <Button
               type="button"
-              onClick={() => setQpAccepted(true)}
-              disabled={qpQuestions.length === 0}
+              onClick={onAcceptPaper}
+              disabled={qpQuestions.length === 0 || confirming}
               className="cursor-pointer p-1 pr-4"
             >
               <span className="flex h-full aspect-square items-center justify-center rounded-sm bg-secondary p-1 text-secondary-foreground">
                 <Check className="size-4" />
               </span>
-              Accept paper
+              {confirming
+                ? "Confirming…"
+                : stencilExamId
+                  ? "Review & confirm (READY_FOR_EVALUATION)"
+                  : "Accept paper"}
                 </Button>
               </div>
           <Sheet open={qpPaperOpen} onOpenChange={setQpPaperOpen}>

@@ -242,6 +242,8 @@ def init_exam_db() -> None:
                 assigned_teacher TEXT NOT NULL DEFAULT '',
                 student_dataset_id INTEGER NULL,
                 student_label TEXT NOT NULL DEFAULT '',
+                is_released BOOLEAN NOT NULL DEFAULT FALSE,
+                released_at TIMESTAMPTZ NULL,
                 created_at TIMESTAMPTZ NOT NULL DEFAULT now()
             );
             CREATE TABLE IF NOT EXISTS student_marks (
@@ -273,6 +275,21 @@ def init_exam_db() -> None:
             );
             """
         )
+        # ---- lightweight migrations for pre-existing databases ----
+        # Older DBs were created without the results-release columns, so
+        # backfill them idempotently; a failure here must not kill startup.
+        for ddl in (
+            "ALTER TABLE final_exams ADD COLUMN IF NOT EXISTS"
+            " is_released BOOLEAN NOT NULL DEFAULT FALSE",
+            "ALTER TABLE final_exams ADD COLUMN IF NOT EXISTS"
+            " released_at TIMESTAMPTZ NULL",
+        ):
+            try:
+                with psycopg.connect(EXAM_DATABASE_URL) as migrate_conn:
+                    migrate_conn.execute(ddl)
+                    migrate_conn.commit()
+            except Exception as exc:  # keep startup resilient
+                print(f"final_exams migration skipped ({ddl}): {exc}")
 
 
 def upload_bytes_to_s3(data: bytes, content_type: str, ext: str, prefix: str) -> dict:
@@ -1099,6 +1116,7 @@ async def list_final_exams(teacher: str = ""):
                 rows = conn.execute(
                     "SELECT id, subject_name, total_marks, total_questions,"
                     " assigned_teacher, student_dataset_id, student_label,"
+                    " is_released, released_at,"
                     " created_at FROM final_exams"
                     " WHERE assigned_teacher = %s ORDER BY created_at DESC",
                     (teacher,),
@@ -1107,6 +1125,7 @@ async def list_final_exams(teacher: str = ""):
                 rows = conn.execute(
                     "SELECT id, subject_name, total_marks, total_questions,"
                     " assigned_teacher, student_dataset_id, student_label,"
+                    " is_released, released_at,"
                     " created_at FROM final_exams ORDER BY created_at DESC"
                 ).fetchall()
     except psycopg.OperationalError as exc:
@@ -1124,6 +1143,8 @@ async def list_final_exams(teacher: str = ""):
                 "assigned_teacher": r["assigned_teacher"],
                 "student_dataset_id": r["student_dataset_id"],
                 "student_label": r["student_label"],
+                "is_released": bool(r.get("is_released", False)),
+                "released_at": str(r["released_at"]) if r.get("released_at") else None,
                 "created_at": str(r["created_at"]),
             }
             for r in rows
@@ -1140,6 +1161,7 @@ async def get_final_exam(exam_id: int):
                 "SELECT id, subject_name, syllabus_exam_id, syllabus_summary,"
                 " question_json, total_marks, total_questions, question_pages,"
                 " assigned_teacher, student_dataset_id, student_label,"
+                " is_released, released_at,"
                 " created_at FROM final_exams WHERE id = %s",
                 (exam_id,),
             ).fetchone()
@@ -1162,7 +1184,251 @@ async def get_final_exam(exam_id: int):
         "assigned_teacher": r["assigned_teacher"],
         "student_dataset_id": r["student_dataset_id"],
         "student_label": r["student_label"] or "",
+        "is_released": bool(r.get("is_released", False)),
+        "released_at": str(r["released_at"]) if r.get("released_at") else None,
         "created_at": str(r["created_at"]),
+    }
+
+
+@app.post("/exam/final/{exam_id}/release")
+async def release_final_exam(exam_id: int):
+    """Release an exam's results: makes it visible on public /results."""
+    try:
+        with psycopg.connect(EXAM_DATABASE_URL, row_factory=dict_row) as conn:
+            existing = conn.execute(
+                "SELECT id, student_dataset_id FROM final_exams WHERE id = %s",
+                (exam_id,),
+            ).fetchone()
+            if existing is None:
+                raise HTTPException(status_code=404, detail="exam not found")
+            if not existing.get("student_dataset_id"):
+                raise HTTPException(
+                    status_code=422,
+                    detail="link a student list before releasing results",
+                )
+            r = conn.execute(
+                "UPDATE final_exams SET is_released = TRUE, released_at = now()"
+                " WHERE id = %s RETURNING id, is_released, released_at",
+                (exam_id,),
+            ).fetchone()
+            conn.commit()
+    except HTTPException:
+        raise
+    except psycopg.OperationalError as exc:
+        raise HTTPException(status_code=503, detail="examdb unreachable")
+    return {
+        "id": r["id"],
+        "is_released": bool(r["is_released"]),
+        "released_at": str(r["released_at"]) if r.get("released_at") else None,
+    }
+
+
+@app.post("/exam/final/{exam_id}/unrelease")
+async def unrelease_final_exam(exam_id: int):
+    """Hide an exam's results again (removes it from public /results)."""
+    try:
+        with psycopg.connect(EXAM_DATABASE_URL, row_factory=dict_row) as conn:
+            r = conn.execute(
+                "UPDATE final_exams SET is_released = FALSE, released_at = NULL"
+                " WHERE id = %s RETURNING id",
+                (exam_id,),
+            ).fetchone()
+            if r is None:
+                raise HTTPException(status_code=404, detail="exam not found")
+            conn.commit()
+    except HTTPException:
+        raise
+    except psycopg.OperationalError:
+        raise HTTPException(status_code=503, detail="examdb unreachable")
+    return {"id": r["id"], "is_released": False, "released_at": None}
+
+
+def _num_or_none(value: object) -> float | None:
+    try:
+        if value is None:
+            return None
+        text = str(value).strip()
+        if text == "":
+            return None
+        return float(text)
+    except (TypeError, ValueError):
+        return None
+
+
+def _released_exam_or_error(exam_id: int) -> dict:
+    try:
+        with psycopg.connect(EXAM_DATABASE_URL, row_factory=dict_row) as conn:
+            r = conn.execute(
+                "SELECT id, subject_name, total_marks,"
+                " assigned_teacher, student_dataset_id, student_label,"
+                " is_released FROM final_exams WHERE id = %s",
+                (exam_id,),
+            ).fetchone()
+    except psycopg.OperationalError:
+        raise HTTPException(status_code=503, detail="examdb unreachable")
+    if r is None:
+        raise HTTPException(status_code=404, detail="exam not found")
+    if not r.get("is_released"):
+        raise HTTPException(status_code=403, detail="results not released yet")
+    if not r.get("student_dataset_id"):
+        raise HTTPException(status_code=422, detail="no student list linked")
+    return dict(r)
+
+
+def _read_dataset_csv_rows(ds: dict, limit: int = 5000) -> tuple[list[str], list[dict]]:
+    """Read full CSV rows for a dataset (S3 first, stored preview fallback)."""
+    columns = ds.get("columns") or []
+    s3_key = ds.get("s3_key") or ""
+    if s3_key:
+        try:
+            s3 = get_s3_client()
+            buf = BytesIO()
+            s3.download_fileobj(S3_BUCKET, s3_key, buf)
+            raw = buf.getvalue()
+            try:
+                csv_text = raw.decode("utf-8-sig")
+            except UnicodeDecodeError:
+                csv_text = raw.decode("latin-1")
+            import csv as _csv
+
+            text = csv_text.lstrip("\ufeff").replace("\r\n", "\n").replace("\r", "\n")
+            lines = [ln for ln in text.split("\n") if ln.strip() != ""]
+            reader = _csv.DictReader(lines)
+            cols = [c.strip() if isinstance(c, str) else c for c in (reader.fieldnames or [])]
+            rows: list[dict] = []
+            for row in reader:
+                if len(rows) >= limit:
+                    break
+                rows.append({c: (row.get(c, "") or "") for c in cols})
+            return cols, rows
+        except HTTPException:
+            raise
+        except Exception as exc:
+            raise HTTPException(status_code=502, detail=f"could not read csv: {exc}")
+    preview = ds.get("preview") or []
+    return columns, [{c: (row.get(c, "") or "") for c in columns} for row in preview]
+
+
+def _teacher_marks_map(exam_id: int, dataset_id: int) -> dict[int, float]:
+    """row_index -> teacher-entered total (overrides CSV obtained value)."""
+    try:
+        with psycopg.connect(EXAM_DATABASE_URL, row_factory=dict_row) as conn:
+            rows = conn.execute(
+                "SELECT row_index, total_obtained FROM student_marks"
+                " WHERE exam_id = %s AND student_dataset_id = %s",
+                (exam_id, dataset_id),
+            ).fetchall()
+    except psycopg.OperationalError:
+        return {}
+    out: dict[int, float] = {}
+    for r in rows:
+        try:
+            out[int(r["row_index"])] = float(r["total_obtained"])
+        except (TypeError, ValueError, KeyError):
+            continue
+    return out
+
+
+@app.get("/exam/results")
+async def list_released_results():
+    """Public: exams whose results the coordinator released (newest first)."""
+    try:
+        with psycopg.connect(EXAM_DATABASE_URL, row_factory=dict_row) as conn:
+            rows = conn.execute(
+                "SELECT f.id, f.subject_name, f.total_marks, f.total_questions,"
+                " f.assigned_teacher, f.student_label, f.released_at,"
+                " COALESCE(d.row_count, 0) AS student_count,"
+                " COALESCE(d.mapping_json->>'unique_field', '') AS unique_field"
+                " FROM final_exams f"
+                " LEFT JOIN student_datasets d ON d.id = f.student_dataset_id"
+                " WHERE f.is_released = TRUE"
+                " ORDER BY f.released_at DESC NULLS LAST, f.created_at DESC"
+            ).fetchall()
+    except psycopg.OperationalError:
+        raise HTTPException(status_code=503, detail="examdb unreachable")
+    return {
+        "exams": [
+            {
+                "id": r["id"],
+                "subject_name": r["subject_name"],
+                "total_marks": r["total_marks"],
+                "released_at": str(r["released_at"]) if r.get("released_at") else None,
+                "student_label": r["student_label"] or "",
+                "student_count": r["student_count"] or 0,
+                "unique_field": r.get("unique_field") or "",
+            }
+            for r in rows
+        ]
+    }
+
+
+@app.get("/exam/results/{exam_id}")
+async def lookup_released_result(exam_id: int, q: str):
+    """Public: look up one student's result by the dataset unique field."""
+    query = (q or "").strip()
+    if not query:
+        raise HTTPException(status_code=422, detail="search text required")
+    exam = _released_exam_or_error(exam_id)
+    dataset_id = int(exam["student_dataset_id"])
+    ds = _get_dataset_or_404(dataset_id)
+    mapping = ds.get("mapping") or {}
+    unique_col = (mapping.get("unique_field") or "").strip()
+    name_col = (mapping.get("student_name") or "").strip()
+    total_col = (mapping.get("total_marks") or "").strip()
+    obtained_col = (mapping.get("obtained_marks") or "").strip()
+    search_col = unique_col or name_col
+    if not search_col:
+        raise HTTPException(status_code=422, detail="no searchable column")
+    columns, csv_rows = _read_dataset_csv_rows(ds)
+    if search_col not in columns:
+        raise HTTPException(status_code=422, detail="search column missing")
+    marks_map = _teacher_marks_map(exam_id, dataset_id)
+    norm = query.lower()
+    exact: list[tuple[int, dict]] = []
+    partial: list[tuple[int, dict]] = []
+    for idx, row in enumerate(csv_rows):
+        cell = str(row.get(search_col, "") or "").strip()
+        if not cell:
+            continue
+        low = cell.lower()
+        if low == norm:
+            exact.append((idx, row))
+        elif norm in low:
+            partial.append((idx, row))
+    hits = exact or partial
+    if not hits:
+        raise HTTPException(status_code=404, detail="no student found")
+    if len(hits) > 1 and not exact:
+        cands = []
+        for idx, row in hits[:10]:
+            cands.append({
+                "row_index": idx,
+                search_col: str(row.get(search_col, "") or ""),
+                "student_name": str(row.get(name_col, "") or "") if name_col else "",
+            })
+        return {
+            "match": "candidates", "search_column": search_col,
+            "total": len(hits), "candidates": cands,
+        }
+    row_index, row = hits[0]
+    override = marks_map.get(row_index)
+    csv_obtained = _num_or_none(row.get(obtained_col)) if obtained_col else None
+    csv_max = _num_or_none(row.get(total_col)) if total_col else None
+    obtained = override if override is not None else csv_obtained
+    max_marks = csv_max if csv_max is not None else _num_or_none(exam.get("total_marks"))
+    pct = (obtained / max_marks * 100) if obtained is not None and max_marks else None
+    return {
+        "match": "single", "search_column": search_col,
+        "exam": {"id": exam["id"], "subject_name": exam["subject_name"]},
+        "student": {
+            "row_index": row_index,
+            "unique_value": str(row.get(search_col, "") or ""),
+            "student_name": str(row.get(name_col, "") or "") if name_col else "",
+            "max_marks": max_marks,
+            "obtained_marks": obtained,
+            "percentage": round(pct, 2) if pct is not None else None,
+            "updated_by_teacher": override is not None,
+        },
     }
 
 
@@ -1703,7 +1969,11 @@ async def upload_student_csv(
         mapping_obj = _json.loads(mapping or "{}")
     except Exception:
         raise HTTPException(status_code=422, detail="mapping must be valid JSON")
-    required_keys = ("student_name", "total_marks", "obtained_marks", "attendance")
+    # unique_field is the public /results search key; default to the name
+    # column so older clients that don't send it keep working.
+    if not mapping_obj.get("unique_field"):
+        mapping_obj["unique_field"] = mapping_obj.get("student_name", "")
+    required_keys = ("student_name", "total_marks", "obtained_marks", "attendance", "unique_field")
     missing = [k for k in required_keys if not mapping_obj.get(k)]
     if missing:
         raise HTTPException(
@@ -1840,7 +2110,9 @@ async def update_student_dataset(dataset_id: int, body: StudentUpdateRequest):
     current = _get_dataset_or_404(dataset_id)
     columns = current.get("columns") or []
     mapping_obj = body.mapping or {}
-    required_keys = ("student_name", "total_marks", "obtained_marks", "attendance")
+    if not mapping_obj.get("unique_field"):
+        mapping_obj["unique_field"] = mapping_obj.get("student_name", "")
+    required_keys = ("student_name", "total_marks", "obtained_marks", "attendance", "unique_field")
     missing = [k for k in required_keys if not mapping_obj.get(k)]
     if missing:
         raise HTTPException(

@@ -1,0 +1,111 @@
+# EC2 single-host stack — mponline backends + local Postgres.
+# Host: i-0aa723c7bb18f7bd0 | public 3.109.3.187 | private 172.31.8.45 | ap-south-1
+#
+# Inter-service wiring (inside docker network, via service DNS):
+#   gateway  -> http://auth:8002 , http://exam-api:8001 , http://scanner:8000
+# Externally (frontends / desktop / web point here — apps/web + apps/desktop NOT deployed):
+#   scanner  http://3.109.3.187:8000
+#   exam-api http://3.109.3.187:8001
+#   auth     http://3.109.3.187:8002
+#   gateway  http://3.109.3.187:8090   <-- desktop/web should use this single entrypoint
+#
+# Postgres runs local on this EC2 (pgdata volume). NOT published publicly;
+# bound to 127.0.0.1:5432 for EC2-local debugging only. Services reach it as
+# postgres:5432 inside the compose network.
+#
+# Deploy:  pwsh scripts/deploy-ec2.ps1   (uses AWS CLI + SSH key sih139-backend-key)
+
+name: mponline-ec2
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: mponline-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${PG_PASSWORD:?set PG_PASSWORD in .env.ec2}
+      POSTGRES_DB: postgres
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./deploy/postgres-init:/docker-entrypoint-initdb.d:ro
+    ports:
+      - "127.0.0.1:5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  exam-api:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile
+    container_name: mponline-exam-api
+    restart: unless-stopped
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8001"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      EXAM_DATABASE_URL: "postgresql://postgres:${PG_PASSWORD}@postgres:5432/examdb"
+      DATABASE_URL: "postgresql://postgres:${PG_PASSWORD}@postgres:5432/examdb"
+      LUNA_API_KEY: ${LUNA_API_KEY:?set LUNA_API_KEY}
+      LUNA_BASE_URL: ${LUNA_BASE_URL:-https://api.apinex.bond/v1}
+      LUNA_MODEL: ${LUNA_MODEL:-free/gpt-6-luna}
+      S3_BUCKET: ${S3_BUCKET:-mponline-images-398218088339}
+      AWS_REGION: ${AWS_REGION:-ap-south-1}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+    ports:
+      - "8001:8001"
+
+  scanner:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile
+    container_name: mponline-scanner
+    restart: unless-stopped
+    # EC2 has no webcam — server still runs (placeholder frames, /health ok).
+    command: ["uvicorn", "sheet_scanner.server:app", "--host", "0.0.0.0", "--port", "8000", "--app-dir", "/srv/api/src"]
+    ports:
+      - "8000:8000"
+
+  auth:
+    build:
+      context: ./apps/auth-service
+      dockerfile: Dockerfile
+    container_name: mponline-auth
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      AUTH_DATABASE_URL: "postgresql://postgres:${PG_PASSWORD}@postgres:5432/mponline_auth"
+      DATABASE_URL: "postgresql://postgres:${PG_PASSWORD}@postgres:5432/mponline_auth"
+      AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:?set AUTH_JWT_SECRET}
+      AUTH_JWT_TTL_HOURS: ${AUTH_JWT_TTL_HOURS:-168}
+    ports:
+      - "8002:8002"
+
+  gateway:
+    build:
+      context: ./apps/gateway
+      dockerfile: Dockerfile
+    container_name: mponline-gateway
+    restart: unless-stopped
+    depends_on:
+      - exam-api
+      - auth
+      - scanner
+    environment:
+      # In-host service DNS (reliable). Public-IP equivalents for reference:
+      #   http://3.109.3.187:8002 / :8001 / :8000
+      AUTH_SERVICE_URL: http://auth:8002
+      EXAM_API_URL: http://exam-api:8001
+      SCANNER_URL: http://scanner:8000
+    ports:
+      - "8090:8090"
+
+volumes:
+  pgdata:

@@ -5,17 +5,17 @@ import { AnimatePresence, motion } from "motion/react";
 import {
   AlertCircle,
   ArrowRight,
+  Bot,
   Check,
+  ChevronUp,
   ImagePlus,
   Loader2,
   MessageSquareText,
   RotateCcw,
-  SendHorizontal,
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Kbd } from "@/components/ui/kbd";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
@@ -39,6 +39,17 @@ export type ChatGrading = {
   accepted: boolean;
 };
 
+/** An action requested from outside the chat (answer-sheet image menu) that
+ *  must run exactly like a teacher turn. `id` must be unique per request. */
+export type ChatRequest = {
+  id: number;
+  text: string;
+  /** Page to attach to this turn (null = no page attached). */
+  pageIdx: number | null;
+  /** Attach the page and focus the input, without sending anything yet. */
+  attachOnly?: boolean;
+};
+
 type Bubble =
   | {
       id: number;
@@ -60,6 +71,56 @@ type Bubble =
 
 let nextId = 1;
 
+/** Shown in the composer until a response reports the model actually used. */
+const DEFAULT_MODEL = "gpt-6-luna";
+
+/** Phrases the assistant cycles through while a turn is in flight. */
+const THINKING_STEPS = [
+  "Thinking…",
+  "Evaluating…",
+  "Analyzing…",
+  "Reading the page…",
+  "Matching the question…",
+  "Working out the marks…",
+];
+
+/** Typing bubble — the dots are replaced by a live status label. */
+function ThinkingBubble() {
+  const [step, setStep] = useState(0);
+  useEffect(() => {
+    const t = window.setInterval(
+      () => setStep((v) => (v + 1) % THINKING_STEPS.length),
+      1600,
+    );
+    return () => window.clearInterval(t);
+  }, []);
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="flex"
+    >
+      <div
+        aria-live="polite"
+        className="flex items-center gap-2 rounded-2xl rounded-bl-sm bg-secondary px-3 py-2 text-sm text-secondary-foreground"
+      >
+        <Loader2 className="size-3.5 shrink-0 animate-spin opacity-70" />
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.span
+            key={step}
+            initial={{ opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -4 }}
+            transition={{ duration: 0.18 }}
+          >
+            {THINKING_STEPS[step]}
+          </motion.span>
+        </AnimatePresence>
+      </div>
+    </motion.div>
+  );
+}
+
 export function AnswerSheetChat({
   subject,
   questions,
@@ -67,10 +128,12 @@ export function AnswerSheetChat({
   files,
   previews,
   currentPage,
+  queued,
   onGrading,
   onAcceptMarks,
   onJumpToPage,
   onReviewMarks,
+  onQueuedHandled,
 }: {
   subject: string;
   questions: unknown[];
@@ -82,6 +145,8 @@ export function AnswerSheetChat({
   previews: string[];
   /** Index of the page currently shown in the left preview. */
   currentPage: number;
+  /** External action queued by the page (answer-sheet image menu). */
+  queued?: ChatRequest | null;
   /** Fired after each response so the page can remember latest gradings. */
   onGrading?: (g: ChatGrading) => void;
   /** Fired when the teacher accepts a grading card's marks. */
@@ -90,12 +155,16 @@ export function AnswerSheetChat({
   onJumpToPage: (idx: number) => void;
   /** Switch the right panel to the marks tab. */
   onReviewMarks: () => void;
+  /** Called once a queued request has been turned into a turn. */
+  onQueuedHandled?: (id: number) => void;
 }) {
   const [messages, setMessages] = useState<Bubble[]>([]);
   const [input, setInput] = useState("");
   const [attached, setAttached] = useState<number[]>([]);
   const [target, setTarget] = useState<string>("auto");
   const [sending, setSending] = useState(false);
+  // Model label shown next to the question pin (refreshed from each response).
+  const [modelLabel, setModelLabel] = useState(DEFAULT_MODEL);
   const threadRef = useRef<HTMLDivElement>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
 
@@ -114,13 +183,16 @@ export function AnswerSheetChat({
   }, [currentPage, previews.length]);
 
   const send = useCallback(
-    async (overrideText?: string) => {
+    async (overrideText?: string, overridePages?: number[]) => {
       const text = (overrideText ?? input).trim();
+      // An external request (image menu) may pin its own page for this turn;
+      // otherwise the composer's attachments ride along.
+      const pages = overridePages ?? attached;
       if (sending) return;
-      if (!text && attached.length === 0) return;
+      if (!text && pages.length === 0) return;
 
-      const userImages = attached.map((i) => ({ url: previews[i], pageIdx: i }));
-      const userFiles = attached
+      const userImages = pages.map((i) => ({ url: previews[i], pageIdx: i }));
+      const userFiles = pages
         .map((i) => files[i])
         .filter((f): f is File => f instanceof File);
       // History for the model: text-only transcript (images only ride the
@@ -148,7 +220,8 @@ export function AnswerSheetChat({
       };
       setMessages((prev) => [...prev, userBubble]);
       setInput("");
-      setAttached([]);
+      // A page pinned by an external request is not a composer attachment.
+      if (!overridePages) setAttached([]);
       setSending(true);
 
       try {
@@ -162,6 +235,8 @@ export function AnswerSheetChat({
           targetQuestion: target === "auto" ? "" : target,
           images: userFiles,
         });
+        // The backend reports the model it ran (e.g. "free/gpt-6-luna").
+        if (res.model) setModelLabel(res.model.split("/").pop() || res.model);
         const grading: ChatGrading | null =
           res.kind === "grading"
             ? {
@@ -221,6 +296,28 @@ export function AnswerSheetChat({
     );
   };
 
+  // Run page-level requests (image menu / quick marks) as a normal turn.
+  const handledRequest = useRef(0);
+  useEffect(() => {
+    if (!queued || queued.id === handledRequest.current) return;
+    handledRequest.current = queued.id;
+    if (queued.attachOnly) {
+      const page = queued.pageIdx;
+      if (page !== null) {
+        setAttached((prev) =>
+          prev.includes(page) ? prev : [...prev, page].sort((a, b) => a - b),
+        );
+      }
+      taRef.current?.focus();
+    } else {
+      void send(
+        queued.text,
+        queued.pageIdx === null ? undefined : [queued.pageIdx],
+      );
+    }
+    onQueuedHandled?.(queued.id);
+  }, [queued, send, onQueuedHandled]);
+
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
@@ -228,12 +325,15 @@ export function AnswerSheetChat({
     }
   };
 
+  // Send stays hidden until there is something to send (text or a page).
+  const canSend = input.trim().length > 0 || attached.length > 0;
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       {/* thread */}
       <div
         ref={threadRef}
-        className="flex min-h-[280px] flex-1 flex-col gap-3 overflow-y-auto p-1 lg:min-h-0"
+        className="no-scrollbar flex min-h-[280px] flex-1 flex-col gap-3 overflow-y-auto p-1 lg:min-h-0"
       >
         {messages.length === 0 && !sending && (
           <div className="flex flex-1 flex-col items-center justify-center gap-2 py-10 text-center">
@@ -287,7 +387,7 @@ export function AnswerSheetChat({
                 className="flex max-w-[92%] flex-col items-start gap-1"
               >
                 {m.grading ? (
-                  <div className="flex w-full flex-col gap-2 rounded-2xl rounded-bl-sm border bg-sidebar p-3">
+                  <div className="flex w-full flex-col gap-2 rounded-2xl rounded-bl-sm bg-secondary p-3 text-secondary-foreground">
                     <div className="flex flex-wrap items-center gap-2">
                       <Badge variant="secondary">
                         Q{m.grading.matchedQuestion || "—"}
@@ -370,7 +470,7 @@ export function AnswerSheetChat({
                   </div>
                 ) : (
                   m.text && (
-                    <div className="rounded-2xl rounded-bl-sm border bg-sidebar px-3 py-2 text-sm leading-relaxed">
+                    <div className="rounded-2xl rounded-bl-sm bg-secondary px-3 py-2 text-sm leading-relaxed text-secondary-foreground">
                       {m.text}
                     </div>
                   )
@@ -415,30 +515,13 @@ export function AnswerSheetChat({
           )}
         </AnimatePresence>
 
-        {sending && (
-          <motion.div
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="flex"
-          >
-            <div className="flex items-center gap-1.5 rounded-2xl rounded-bl-sm border bg-sidebar px-3 py-2.5">
-              {[0, 1, 2].map((i) => (
-                <motion.span
-                  key={i}
-                  animate={{ opacity: [0.3, 1, 0.3] }}
-                  transition={{ duration: 1.1, repeat: Infinity, delay: i * 0.18 }}
-                  className="size-1.5 rounded-full bg-muted-foreground"
-                />
-              ))}
-            </div>
-          </motion.div>
-        )}
+        {sending && <ThinkingBubble />}
       </div>
 
-      {/* composer */}
-      <div className="flex shrink-0 flex-col gap-2 border-t pt-2">
+      {/* composer — one floating card: add-image · input · send (on demand) */}
+      <div className="mt-1 flex shrink-0 flex-col gap-1.5 rounded-2xl border bg-background p-1.5 shadow-lg">
         {attached.length > 0 && (
-          <div className="flex flex-wrap gap-1.5">
+          <div className="flex flex-wrap gap-1.5 px-0.5 pt-0.5">
             {attached.map((i) => (
               <div
                 key={i}
@@ -461,16 +544,16 @@ export function AnswerSheetChat({
             ))}
           </div>
         )}
-        <div className="flex items-end gap-1.5">
+        <div className="flex items-end gap-1">
           <Button
             type="button"
-            variant="outline"
+            variant="ghost"
             size="icon"
             onClick={attachCurrent}
             disabled={attached.includes(currentPage)}
-            aria-label="Attach current page"
+            aria-label="Add image"
             title={`Attach page ${currentPage + 1}`}
-            className="h-9 w-9 shrink-0 cursor-pointer"
+            className="h-9 w-9 shrink-0 cursor-pointer rounded-xl text-muted-foreground hover:text-foreground"
           >
             <ImagePlus className="size-4" />
           </Button>
@@ -481,27 +564,36 @@ export function AnswerSheetChat({
             onKeyDown={onKeyDown}
             placeholder="Ask about the marks, or attach a page to grade…"
             rows={1}
-            className="max-h-28 min-h-[36px] flex-1 resize-none py-2"
+            className="max-h-32 min-h-[44px] flex-1 resize-none border-0 bg-transparent px-1 py-2.5 shadow-none focus-visible:ring-0"
           />
-          <Button
-            type="button"
-            size="icon"
-            onClick={() => send()}
-            disabled={sending || (!input.trim() && attached.length === 0)}
-            aria-label="Send message"
-            className="h-9 w-9 shrink-0 cursor-pointer"
-          >
-            {sending ? (
-              <Loader2 className="size-4 animate-spin" />
-            ) : (
-              <SendHorizontal className="size-4" />
-            )}
-          </Button>
+          {(canSend || sending) && (
+            <Button
+              type="button"
+              size="icon"
+              onClick={() => send()}
+              disabled={sending}
+              aria-label="Send message"
+              className="h-9 w-9 shrink-0 cursor-pointer rounded-xl"
+            >
+              {sending ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <ChevronUp className="size-5" />
+              )}
+            </Button>
+          )}
         </div>
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-muted-foreground">Question</span>
+
+        {/* divider: composer input above, question pin / model below */}
+        <div className="h-px w-full bg-border" />
+
+        <div className="flex items-center gap-2 px-0.5 pb-0.5">
+          <span className="text-[11px] text-muted-foreground">Question</span>
           <Select value={target} onValueChange={setTarget}>
-            <SelectTrigger className="h-7 w-[220px] text-xs">
+            <SelectTrigger
+              size="sm"
+              className="h-6 w-[180px] rounded-md px-2 py-0 text-[11px] data-[size=sm]:h-6"
+            >
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -513,9 +605,12 @@ export function AnswerSheetChat({
               ))}
             </SelectContent>
           </Select>
-          <span className="ml-auto hidden items-center gap-1 text-[10px] text-muted-foreground sm:flex">
-            <Kbd className="h-4 px-1 text-[9px]">Enter</Kbd> send ·{" "}
-            <Kbd className="h-4 px-1 text-[9px]">Shift+Enter</Kbd> newline
+          <span
+            className="ml-auto flex shrink-0 items-center gap-1 text-[10px] text-muted-foreground"
+            title="Model"
+          >
+            <Bot className="size-3" />
+            {modelLabel}
           </span>
         </div>
       </div>
