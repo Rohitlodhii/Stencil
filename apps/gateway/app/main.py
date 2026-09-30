@@ -80,9 +80,18 @@ async def health():
         except Exception as exc:
             return {"url": url, "ok": False, "error": str(exc)[:200]}
 
-    auth, exam, scanner = await _gather(check(AUTH_SERVICE_URL), check(EXAM_API_URL), check(SCANNER_URL))
-    all_ok = all(s.get("ok") for s in (auth, exam, scanner))
-    return {"status": "ok" if all_ok else "degraded", "auth": auth, "exam": exam, "scanner": scanner}
+    auth, exam = await _gather(check(AUTH_SERVICE_URL), check(EXAM_API_URL))
+    all_ok = all(service.get("ok") for service in (auth, exam))
+    return {
+        "status": "ok" if all_ok else "degraded",
+        "auth": auth,
+        "exam": exam,
+        "scanner": {
+            "ok": None,
+            "mode": "local_companion",
+            "detail": "Checked by the examiner browser on 127.0.0.1, not by Render.",
+        },
+    }
 
 
 async def _gather(*coros):
@@ -146,6 +155,11 @@ async def proxy_config(request: Request):
 @app.api_route("/status", methods=["GET", "OPTIONS"])
 async def proxy_status(request: Request):
     return await _proxy(request, EXAM_API_URL, "/status")
+
+
+@app.api_route("/demo/report", methods=["GET", "OPTIONS"])
+async def proxy_demo_report(request: Request):
+    return await _proxy(request, EXAM_API_URL, "/demo/report")
 
 
 @app.api_route("/demo-uploads/{path:path}", methods=["GET", "HEAD", "OPTIONS"])

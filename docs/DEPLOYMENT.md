@@ -109,6 +109,11 @@ authentication requests. `VITE_SCANNER_URL` should normally remain
 `http://127.0.0.1:8000` so each examiner browser reaches its own local scanner
 companion; it must never point at Render.
 
+Do not set `VITE_GATEWAY_URL` to the `stencil-api` service. A direct API URL will
+make `/status` work while `/auth/*` returns 404 because authentication is owned by
+`stencil-auth`. Do not append `/api`; the gateway accepts `/auth/*`, `/exam/*`,
+`/status`, and `/demo/report` at its root URL.
+
 After saving the Root Directory, redeploy the latest `main` commit without reusing
 the previous build cache. A deployment still showing the plain "Sheet Scanner"
 page is building `apps/web`, not the primary Stencil frontend.

@@ -6,24 +6,24 @@ import { isTauriRuntime } from "@/lib/desktop-scanner";
 
 function ProductReleases({ title, description, version, items }: { title: string; description: string; version: string; items: ProductDownload[] }) {
   const headingId = `${title.replace(/\s+/g, "-")}-heading`;
+  const availableItems = items.filter((item) => item.url);
   return (
     <section className="app-section" aria-labelledby={headingId}>
       <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
         <div><h2 id={headingId} className="section-heading">{title}</h2><p className="section-description">{description}</p></div>
         <Badge variant="outline">Version {version}</Badge>
       </div>
-      <div className="divide-y rounded-lg border bg-card">
-        {items.map((item) => (
+      {availableItems.length > 0 ? <div className="divide-y rounded-lg border bg-card">
+        {availableItems.map((item) => (
           <div key={item.platform} className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:p-5">
             <div className="min-w-0 flex-1">
               <p className="font-semibold">{item.label}</p><p className="mt-0.5 text-sm text-muted-foreground">{item.detail}</p>
               {item.checksum && <p className="mt-2 break-all font-mono text-xs text-muted-foreground">SHA-256: {item.checksum}</p>}
             </div>
-            {item.url ? <Button asChild><a href={item.url} target="_blank" rel="noreferrer"><Download /> Download</a></Button>
-              : <div className="text-left sm:text-right"><Badge variant="secondary">Installer not published yet</Badge><p className="mt-1 text-xs text-muted-foreground">No release URL is configured.</p></div>}
+            <Button asChild><a href={item.url} target="_blank" rel="noreferrer"><Download /> Download</a></Button>
           </div>
         ))}
-      </div>
+      </div> : <div className="rounded-lg border border-dashed bg-card p-5"><p className="font-medium">No public installer is available for this application.</p><p className="mt-1 text-sm text-muted-foreground">Use the browser version until a signed release is published.</p></div>}
     </section>
   );
 }
