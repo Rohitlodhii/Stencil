@@ -50,10 +50,10 @@ export function LandingPage() {
         </nav>
 
         <section className="mx-auto flex max-w-5xl flex-col items-center px-6 pt-24 text-center sm:pt-32">
-          <h1 className="max-w-4xl text-4xl font-semibold tracking-tight text-slate-950 sm:text-6xl lg:text-7xl">
+          <h1 className="font-inter-medium max-w-4xl text-3xl font-medium tracking-tight text-slate-950 sm:text-5xl lg:text-6xl">
             AI-Powered Exam Evaluation, From Paper to Results
           </h1>
-          <p className="mt-6 max-w-3xl text-base leading-7 text-slate-600 sm:text-lg sm:leading-8">
+          <p className="font-inter-medium mt-6 max-w-3xl text-base font-medium leading-6 text-muted-foreground">
             Stencil transforms traditional paper-based examinations into a streamlined digital workflow. Scan handwritten answer sheets, understand questions with AI, assist teachers with evaluation, and manage marks — all from one platform.
           </p>
         </section>
