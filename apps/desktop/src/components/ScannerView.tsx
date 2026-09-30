@@ -11,6 +11,7 @@ import {
   fetchScans, fetchStatus, scanImageUrl, selectCamera, streamUrl,
   type Camera, type Scan, type ScannerStatus,
 } from "@/lib/scanner";
+import { isTauriRuntime, launchScannerCompanion } from "@/lib/desktop-scanner";
 
 type ConnectionState = "checking" | "connected" | "disconnected" | "camera-unavailable";
 type LocalPage = { name: string; url: string };
@@ -33,6 +34,7 @@ export function ScannerView() {
   const [message, setMessage] = useState("");
   const [switching, setSwitching] = useState(false);
   const [capturing, setCapturing] = useState(false);
+  const [starting, setStarting] = useState(false);
   const localPagesRef = useRef<LocalPage[]>([]);
 
   const loadScans = useCallback(async () => {
@@ -118,6 +120,17 @@ export function ScannerView() {
     setMessage(`${images.length} page${images.length === 1 ? "" : "s"} added from this device.`);
   };
 
+  const onStartScanner = async () => {
+    setStarting(true);
+    try {
+      const result = await launchScannerCompanion();
+      setMessage(result.already_running ? "Scanner companion is already starting." : "Scanner companion started. Connecting...");
+      window.setTimeout(() => void refresh(), 1200);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Scanner companion could not be started.");
+    } finally { setStarting(false); }
+  };
+
   const connected = connection === "connected";
   const versionMismatch = Boolean(version && version !== SCANNER_EXPECTED_VERSION);
 
@@ -145,7 +158,11 @@ export function ScannerView() {
         {connection === "disconnected" && (
           <CardContent className="flex flex-col gap-3 border-t pt-4 sm:flex-row sm:items-center sm:justify-between">
             <p className="max-w-2xl text-sm text-muted-foreground">Install and start Stencil Scanner Companion, then return here and check the connection. The hosted API remains available without it.</p>
-            <Button asChild><a href="#/download"><Download /> Download scanner</a></Button>
+            {isTauriRuntime() ? (
+              <Button onClick={() => void onStartScanner()} disabled={starting}><CameraIcon /> {starting ? "Starting..." : "Start scanner"}</Button>
+            ) : (
+              <Button asChild><a href="#/download"><Download /> Download scanner</a></Button>
+            )}
           </CardContent>
         )}
       </Card>
