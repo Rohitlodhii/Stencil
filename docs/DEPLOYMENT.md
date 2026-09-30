@@ -86,3 +86,29 @@ docker run --rm -e PORT=10000 -e STENCIL_DEMO_MODE=true -p 10000:10000 stencil-a
 ```
 
 After starting the final command, `http://localhost:10000/health` must return HTTP 200. A degraded database/storage/AI status is expected when those external services are not configured; it is not replaced with an unlabelled mock.
+
+## Vercel frontend
+
+The primary browser UI is the Vite application in `apps/desktop`. The Next.js
+package in `apps/web` is a legacy scanner-only surface and must not be selected as
+the production Vercel project root. The repository-root `vercel.json` installs the
+pnpm workspace, builds `desktop`, and publishes `apps/desktop/dist`.
+
+Use these exact Vercel Project Settings under Build and Deployment:
+
+- Root Directory: blank (repository root), not `apps/web`
+- Framework Preset: Vite
+- Install Command: `corepack pnpm install --frozen-lockfile`
+- Build Command: `corepack pnpm --filter desktop build`
+- Output Directory: `apps/desktop/dist`
+- Node.js Version: 22.x
+
+Configure `VITE_GATEWAY_URL` to the public HTTPS URL of the Render `stencil-web`
+gateway, without a trailing slash. The client uses that gateway for both exam and
+authentication requests. `VITE_SCANNER_URL` should normally remain
+`http://127.0.0.1:8000` so each examiner browser reaches its own local scanner
+companion; it must never point at Render.
+
+After saving the Root Directory, redeploy the latest `main` commit without reusing
+the previous build cache. A deployment still showing the plain "Sheet Scanner"
+page is building `apps/web`, not the primary Stencil frontend.

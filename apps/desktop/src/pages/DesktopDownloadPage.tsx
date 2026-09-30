@@ -5,7 +5,7 @@ import { DESKTOP_DOWNLOADS, RELEASE_VERSIONS, SCANNER_DOWNLOADS, type ProductDow
 import { isTauriRuntime } from "@/lib/desktop-scanner";
 
 function ProductReleases({ title, description, version, items }: { title: string; description: string; version: string; items: ProductDownload[] }) {
-  const headingId = `${title.replaceAll(" ", "-")}-heading`;
+  const headingId = `${title.replace(/\s+/g, "-")}-heading`;
   return (
     <section className="app-section" aria-labelledby={headingId}>
       <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">

@@ -3,7 +3,9 @@
 import { localServiceUrl } from "@/lib/service-url";
 
 export const API_URL =
-  import.meta.env.VITE_API_URL ?? localServiceUrl(8001);
+  import.meta.env.VITE_API_URL ??
+  import.meta.env.VITE_GATEWAY_URL ??
+  localServiceUrl(8001);
 
 export type StencilStatus = {
   status: "ok" | "degraded";
