@@ -48,6 +48,7 @@ LUNA_MODEL = os.getenv("LUNA_MODEL", "free/gpt-6-luna")
 STENCIL_DEMO_MODE = os.getenv("STENCIL_DEMO_MODE", "").strip().lower() in {"1", "true", "yes", "on"}
 DEMO_PUBLIC_BASE_URL = os.getenv("STENCIL_DEMO_PUBLIC_BASE_URL", "").rstrip("/")
 SCANNER_SERVICE_URL = os.getenv("SCANNER_URL", "http://127.0.0.1:8000").rstrip("/")
+SCANNER_SERVER_PROBE = os.getenv("SCANNER_SERVER_PROBE", "").strip().lower() in {"1", "true", "yes", "on"}
 
 # CORS origins: comma-separated list, default to localhost:3000 for local dev
 CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000")
@@ -550,12 +551,14 @@ def _service_status() -> dict:
         storage_error = str(exc).strip().splitlines()[0][:200]
 
     scanner_available = False
-    scanner_error = ""
-    try:
-        with urlopen(f"{SCANNER_SERVICE_URL}/health", timeout=0.75) as response:
-            scanner_available = response.status < 500
-    except Exception as exc:
-        scanner_error = str(exc).strip().splitlines()[0][:200]
+    scanner_error = "Local scanner companion required on the examiner's computer."
+    if SCANNER_SERVER_PROBE:
+        try:
+            with urlopen(f"{SCANNER_SERVICE_URL}/health", timeout=0.75) as response:
+                scanner_available = response.status < 500
+                scanner_error = "" if scanner_available else "Scanner health check failed."
+        except Exception as exc:
+            scanner_error = str(exc).strip().splitlines()[0][:200]
 
     return {
         "status": "ok" if STENCIL_DEMO_MODE or (database_available and storage_available) else "degraded",
@@ -565,6 +568,7 @@ def _service_status() -> dict:
             "available": scanner_available,
             "url": SCANNER_SERVICE_URL,
             "error": scanner_error,
+            "mode": "server_probe" if SCANNER_SERVER_PROBE else "local_companion",
         },
         "database": {"available": database_available, "error": database_error},
         "storage": {

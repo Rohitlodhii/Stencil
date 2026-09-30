@@ -130,7 +130,9 @@ export function PresentationStatusPage() {
             : "unavailable",
         detail: status?.scanner.available
           ? `Health probe passed at ${status.scanner.url}`
-          : status?.scanner.error || "Scanner service is not running.",
+          : status?.scanner.mode === "local_companion"
+            ? "Local scanner companion is checked by the examiner browser; the hosted API does not access camera hardware."
+            : status?.scanner.error || "Scanner service is not running.",
       },
       {
         name: "Database",

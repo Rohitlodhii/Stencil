@@ -9,7 +9,7 @@ export type StencilStatus = {
   status: "ok" | "degraded";
   demo_mode: boolean;
   ai: { available: boolean; model: string };
-  scanner: { available: boolean; url: string; error: string };
+  scanner: { available: boolean; url: string; error: string; mode?: "local_companion" | "server_probe" };
   database: { available: boolean; error: string };
   storage: {
     available: boolean;

@@ -1,232 +1,194 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Camera as CameraIcon, RefreshCw, ScanLine } from "lucide-react";
+import { Camera as CameraIcon, Download, RefreshCw, ScanLine, Upload } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { FieldSelect } from "@/components/FieldSelect";
 import { PageHeader } from "@/components/PageHeader";
 import { StatePanel } from "@/components/StatePanel";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import {
-  SCANNER_URL,
-  captureScan,
-  fetchCameras,
-  fetchScans,
-  fetchStatus,
-  scanImageUrl,
-  selectCamera,
-  streamUrl,
-  type Camera,
-  type Scan,
-  type ScannerStatus,
+  SCANNER_EXPECTED_VERSION, SCANNER_URL, captureScan, fetchCameras, fetchHealth,
+  fetchScans, fetchStatus, scanImageUrl, selectCamera, streamUrl,
+  type Camera, type Scan, type ScannerStatus,
 } from "@/lib/scanner";
 
-function statusLabel(status: ScannerStatus | null, lastCapture: string | null) {
-  if (!status) return "Connecting to scanner…";
-  if (status.stable) return "Stable — capturing…";
-  if (status.sheet_detected)
-    return `Sheet detected — hold still (${status.stable_count}/${status.required_frames})`;
-  if (lastCapture) return lastCapture;
-  return "No sheet detected";
+type ConnectionState = "checking" | "connected" | "disconnected" | "camera-unavailable";
+type LocalPage = { name: string; url: string };
+
+function connectionCopy(state: ConnectionState) {
+  if (state === "checking") return "Checking scanner";
+  if (state === "connected") return "Connected";
+  if (state === "camera-unavailable") return "Camera unavailable";
+  return "Disconnected";
 }
 
 export function ScannerView() {
+  const [connection, setConnection] = useState<ConnectionState>("checking");
   const [status, setStatus] = useState<ScannerStatus | null>(null);
+  const [version, setVersion] = useState("");
   const [scans, setScans] = useState<Scan[]>([]);
+  const [localPages, setLocalPages] = useState<LocalPage[]>([]);
   const [cameras, setCameras] = useState<Camera[]>([]);
   const [currentCamera, setCurrentCamera] = useState<number | null>(null);
+  const [message, setMessage] = useState("");
   const [switching, setSwitching] = useState(false);
-  const [lastCapture, setLastCapture] = useState<string | null>(null);
   const [capturing, setCapturing] = useState(false);
-  const lastCaptureTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const localPagesRef = useRef<LocalPage[]>([]);
 
   const loadScans = useCallback(async () => {
-    try {
-      setScans(await fetchScans());
-    } catch {
-      // Scanner offline — gallery simply stays as-is.
-    }
+    try { setScans(await fetchScans()); } catch { /* Keep the last successful gallery. */ }
   }, []);
 
   const loadCameras = useCallback(async () => {
     try {
-      const { cameras: found, current } = await fetchCameras();
-      setCameras(found);
-      if (current !== null) setCurrentCamera(current);
+      const result = await fetchCameras();
+      setCameras(result.cameras);
+      setCurrentCamera(result.current);
+    } catch { setCameras([]); }
+  }, []);
+
+  const checkScanner = useCallback(async () => {
+    try {
+      const [health, nextStatus] = await Promise.all([fetchHealth(), fetchStatus()]);
+      setVersion(health.version);
+      setStatus(nextStatus);
+      setCurrentCamera(nextStatus.camera_index);
+      setConnection(nextStatus.camera_available ? "connected" : "camera-unavailable");
+      setMessage(nextStatus.camera_error || "");
+      return true;
     } catch {
-      // Scanner offline — selector simply stays as-is.
+      setStatus(null);
+      setConnection("disconnected");
+      setMessage("The local scanner companion is not running or this site is not in its trusted origins.");
+      return false;
     }
   }, []);
 
-  useEffect(() => {
-    const id = setInterval(async () => {
-      try {
-        const data = await fetchStatus();
-        setStatus(data);
-        setCurrentCamera(data.camera_index);
-      } catch {
-        setStatus(null);
-      }
-    }, 400);
-    return () => clearInterval(id);
-  }, []);
+  const refresh = useCallback(async () => {
+    setConnection("checking");
+    if (await checkScanner()) await Promise.all([loadCameras(), loadScans()]);
+  }, [checkScanner, loadCameras, loadScans]);
 
   useEffect(() => {
-    loadScans();
-    loadCameras();
-    const id = setInterval(loadScans, 3000); // picks up auto-captures
-    return () => clearInterval(id);
-  }, [loadScans, loadCameras]);
+    void refresh();
+    const id = window.setInterval(() => void checkScanner(), 1500);
+    return () => window.clearInterval(id);
+  }, [checkScanner, refresh]);
 
   useEffect(() => {
-    return () => {
-      if (lastCaptureTimer.current) clearTimeout(lastCaptureTimer.current);
-    };
-  }, []);
+    const id = window.setInterval(() => {
+      if (connection !== "disconnected") void loadScans();
+    }, 4000);
+    return () => window.clearInterval(id);
+  }, [connection, loadScans]);
+
+  useEffect(() => { localPagesRef.current = localPages; }, [localPages]);
+  useEffect(() => () => localPagesRef.current.forEach((page) => URL.revokeObjectURL(page.url)), []);
 
   const onSelectCamera = async (index: number) => {
     setSwitching(true);
     try {
       setCurrentCamera(await selectCamera(index));
-    } catch {
-      // Scanner offline — selection stays as-is.
-    } finally {
-      setSwitching(false);
-    }
+      setMessage("Camera changed. Waiting for the first frame.");
+      window.setTimeout(() => void checkScanner(), 700);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Camera selection failed.");
+    } finally { setSwitching(false); }
   };
 
   const onCapture = async () => {
     setCapturing(true);
     try {
       const filename = await captureScan();
-      setLastCapture(`Captured ${filename}`);
-      if (lastCaptureTimer.current) clearTimeout(lastCaptureTimer.current);
-      lastCaptureTimer.current = setTimeout(() => setLastCapture(null), 5000);
+      setMessage(`Captured ${filename}`);
       await loadScans();
-    } catch {
-      setLastCapture("Capture failed — no sheet in view");
-    } finally {
-      setCapturing(false);
-    }
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Capture failed. Check that the full page is visible.");
+    } finally { setCapturing(false); }
   };
 
-  const badgeVariant = !status
-    ? "secondary"
-    : status.stable
-      ? "default"
-      : status.sheet_detected
-        ? "outline"
-        : "secondary";
+  const onLocalUpload = (files: FileList | null) => {
+    if (!files) return;
+    const images = Array.from(files).filter((file) => file.type.startsWith("image/"));
+    if (!images.length) {
+      setMessage("Choose one or more JPG, PNG, or WebP answer-sheet images.");
+      return;
+    }
+    setLocalPages((current) => [...current, ...images.map((file) => ({ name: file.name, url: URL.createObjectURL(file) }))]);
+    setMessage(`${images.length} page${images.length === 1 ? "" : "s"} added from this device.`);
+  };
 
-  const dot = !status
-    ? "bg-gray-400"
-    : status.stable
-      ? "bg-green-500"
-      : status.sheet_detected
-        ? "bg-yellow-400"
-        : "bg-gray-400";
+  const connected = connection === "connected";
+  const versionMismatch = Boolean(version && version !== SCANNER_EXPECTED_VERSION);
 
   return (
     <main className="app-page max-w-6xl">
-      <PageHeader
-        title="Sheet scanner"
-        description="Capture aligned answer-sheet pages from a connected camera before evaluation."
-        icon={ScanLine}
-        actions={<Button variant="outline" onClick={() => { loadCameras(); loadScans(); }}><RefreshCw /> Refresh devices</Button>}
-      />
+      <PageHeader title="Sheet scanner" description="Capture answer sheets with the local companion, or add images from this device." icon={ScanLine}
+        actions={<Button variant="outline" onClick={() => void refresh()}><RefreshCw /> Check connection</Button>} />
 
       <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-3 text-lg">
-            <span className={`inline-block size-3 rounded-full ${dot}`} />
-            <span>{statusLabel(status, lastCapture)}</span>
-          </CardTitle>
-          <CardDescription>
-            {status
-              ? `Camera ${status.camera_index} · ${status.stable_count}/${status.required_frames} stable frames`
-              : `Waiting for the scanner at ${SCANNER_URL}`}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-wrap items-center gap-3">
-          <label htmlFor="camera" className="text-sm font-medium">
-            Camera
-          </label>
-          <div className="w-48">
-            <FieldSelect
-              value={currentCamera === null ? "" : String(currentCamera)}
-              onChange={(v) => onSelectCamera(Number(v))}
-              placeholder="Select…"
-              options={cameras.map((cam) => ({
-                value: String(cam.index),
-                label: cam.label,
-              }))}
-              disabled={switching || cameras.length === 0}
-              ariaLabel="Camera"
-            />
+        <CardHeader className="gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <span className={`size-2.5 rounded-full ${connected ? "bg-emerald-500" : connection === "camera-unavailable" ? "bg-amber-500" : "bg-slate-400"}`} />
+              {connectionCopy(connection)}
+            </CardTitle>
+            <CardDescription className="mt-1">
+              {connected ? `Scanner ${version} at ${SCANNER_URL}` : connection === "camera-unavailable" ? message : `Camera scanning requires the companion on this computer (${SCANNER_URL}).`}
+            </CardDescription>
           </div>
-          {status && (
-            <Badge variant={badgeVariant}>
-              {status.stable
-                ? "stable"
-                : status.sheet_detected
-                  ? "sheet detected"
-                  : "no sheet"}
-            </Badge>
-          )}
-          {cameras.length === 0 && (
-            <span className="text-sm text-muted-foreground">
-              No cameras found — check the scanner server.
-            </span>
-          )}
-        </CardContent>
+          <div className="flex flex-wrap gap-2">
+            {versionMismatch && <Badge variant="outline">Expected version {SCANNER_EXPECTED_VERSION}</Badge>}
+            <Badge variant={connected ? "secondary" : "outline"}>{connectionCopy(connection)}</Badge>
+          </div>
+        </CardHeader>
+        {connection === "disconnected" && (
+          <CardContent className="flex flex-col gap-3 border-t pt-4 sm:flex-row sm:items-center sm:justify-between">
+            <p className="max-w-2xl text-sm text-muted-foreground">Install and start Stencil Scanner Companion, then return here and check the connection. The hosted API remains available without it.</p>
+            <Button asChild><a href="#/download"><Download /> Download scanner</a></Button>
+          </CardContent>
+        )}
       </Card>
 
-      <Card className="overflow-hidden">
-        <CardContent>
-          {/* Live MJPEG preview served by the Python scanner. */}
-          {status ? <img
-              key={currentCamera ?? "preview"}
-              src={streamUrl()}
-              alt="Live scanner preview"
-              className="aspect-[4/3] w-full rounded-md border bg-muted object-contain"
-            /> : <StatePanel state="error" title="Scanner service is offline" description={`Start the scanner service and confirm it is reachable at ${SCANNER_URL}. The browser does not activate a camera on this page by itself.`} />}
-          <div className="mt-4 flex justify-end">
-            <Button size="lg" onClick={onCapture} disabled={capturing || !status} className="w-full sm:w-auto">
-              <CameraIcon className="size-4" />
-              {capturing ? "Capturing…" : "Capture answer sheet"}
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+      {(connected || connection === "camera-unavailable") && (
+        <Card>
+          <CardHeader><CardTitle>Camera and capture</CardTitle><CardDescription>Page detection and image processing remain on this computer.</CardDescription></CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex flex-wrap items-end gap-3">
+              <div className="w-full sm:w-64">
+                <label className="mb-1.5 block text-sm font-medium">Camera</label>
+                <FieldSelect value={currentCamera === null ? "" : String(currentCamera)} onChange={(value) => void onSelectCamera(Number(value))}
+                  placeholder="Select camera" options={cameras.map((camera) => ({ value: String(camera.index), label: camera.label }))}
+                  disabled={switching || cameras.length === 0} ariaLabel="Camera" />
+              </div>
+              {status?.sheet_detected && <Badge variant="secondary">Sheet detected: {status.stable_count}/{status.required_frames}</Badge>}
+            </div>
+            {connected ? <img key={currentCamera ?? "preview"} src={streamUrl()} alt="Live local scanner preview" className="aspect-[4/3] w-full rounded-md border bg-muted object-contain" />
+              : <StatePanel state="error" title="Scanner connected, but no camera is available" description={message || "Connect a camera, allow operating-system camera access, and refresh devices."} />}
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <p role="status" className="text-sm text-muted-foreground">{message || "Place the complete page on a contrasting surface and hold it steady."}</p>
+              <Button size="lg" onClick={() => void onCapture()} disabled={capturing || !connected} className="w-full sm:w-auto"><CameraIcon /> {capturing ? "Capturing..." : "Capture answer sheet"}</Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <section className="app-section">
-        <div><h2 className="section-heading">Recent captures</h2><p className="section-description">Captured pages remain available for review in this scanner session.</p></div>
-        {scans.length === 0 ? (
-          <StatePanel state="empty" title="No captured pages" description="Captured answer-sheet pages will appear here." />
-        ) : (
-          <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
-            {scans.map((scan) => (
-              <Card key={scan.filename} className="gap-0 overflow-hidden py-0">
-                <img
-                  src={scanImageUrl(scan.filename)}
-                  alt={scan.filename}
-                  className="w-full"
-                  loading="lazy"
-                />
-                <CardContent className="py-2">
-                  <p className="truncate text-xs text-muted-foreground">
-                    {scan.filename}
-                  </p>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        )}
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div><h2 className="section-heading">Browser upload fallback</h2><p className="section-description">Use existing answer-sheet images when the scanner companion or camera is unavailable.</p></div>
+          <Button variant="outline" asChild><label className="cursor-pointer"><Upload /> Add images<input className="sr-only" type="file" accept="image/jpeg,image/png,image/webp" multiple onChange={(event) => onLocalUpload(event.target.files)} /></label></Button>
+        </div>
+        {localPages.length > 0 && <div className="grid grid-cols-2 gap-4 md:grid-cols-3">{localPages.map((page) => (
+          <Card key={page.url} className="gap-0 overflow-hidden py-0"><img src={page.url} alt={`Uploaded page ${page.name}`} className="aspect-[3/4] w-full bg-muted object-contain" /><CardContent className="py-2"><p className="truncate text-xs text-muted-foreground">{page.name}</p></CardContent></Card>
+        ))}</div>}
+      </section>
+
+      <section className="app-section">
+        <div><h2 className="section-heading">Scanner captures</h2><p className="section-description">Pages stored by the local companion on this computer.</p></div>
+        {scans.length === 0 ? <StatePanel state="empty" title="No scanner captures" description="Captured pages will appear here after the companion saves them." />
+          : <div className="grid grid-cols-2 gap-4 md:grid-cols-3">{scans.map((scan) => (
+            <Card key={scan.filename} className="gap-0 overflow-hidden py-0"><img src={scanImageUrl(scan.filename)} alt={scan.filename} className="w-full" loading="lazy" /><CardContent className="py-2"><p className="truncate text-xs text-muted-foreground">{scan.filename}</p></CardContent></Card>
+          ))}</div>}
       </section>
     </main>
   );
