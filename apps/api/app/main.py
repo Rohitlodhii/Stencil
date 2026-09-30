@@ -43,6 +43,11 @@ LUNA_API_KEY = os.getenv("LUNA_API_KEY", "")
 LUNA_BASE_URL = os.getenv("LUNA_BASE_URL", "https://api.apinex.bond/v1")
 LUNA_MODEL = os.getenv("LUNA_MODEL", "free/gpt-6-luna")
 
+# ---- analysis AI provider: Luna everywhere (for now) ----
+# All image->text calls (syllabus analysis, question-paper
+# extraction, answer-sheet checking) use the Luna provider.
+# VISION_* env vars are deprecated and ignored; Luna is authoritative.
+
 S3_BUCKET = os.getenv("S3_BUCKET", "mponline-images-398218088339")
 AWS_REGION = os.getenv("AWS_REGION", os.getenv("AWS_DEFAULT_REGION", "ap-south-1"))
 
@@ -86,6 +91,74 @@ def _startup() -> None:
     except Exception as exc:
         # postgres down must not kill the whole API; /health reports db state
         print(f"examdb init skipped: {exc}")
+    try:
+        from app.question_paper.repository import init_stencil_db
+
+        init_stencil_db()
+    except Exception as exc:
+        print(f"stencil db init skipped: {exc}")
+
+
+try:
+    from app.exams.routes import router as stencil_router
+
+    app.include_router(stencil_router)
+except Exception as exc:  # stencil engine optional at import time
+    print(f"stencil router skipped: {exc}")
+
+
+# ---- lightweight request-rate metrics (in-memory, per worker process) ----
+import time as _time
+from collections import deque as _deque
+
+_HIT_WINDOW_S = 15 * 60  # keep last 15 minutes of hits
+_hits: _deque = _deque()  # entries: (timestamp, method, path)
+_STARTED_AT = _time.time()
+
+
+@app.middleware("http")
+async def _count_hits(request, call_next):
+    _hits.append((_time.time(), request.method, request.url.path))
+    try:
+        return await call_next(request)
+    finally:
+        # prune old entries + hard cap so memory stays bounded
+        cutoff = _time.time() - _HIT_WINDOW_S
+        while _hits and _hits[0][0] < cutoff:
+            _hits.popleft()
+        while len(_hits) > 20000:
+            _hits.popleft()
+
+
+@app.get("/metrics/hits")
+async def hits_per_minute():
+    """Request rate: hits in the last minute + per-minute buckets (last 15 min).
+
+    Counts reset on server restart (in-memory per worker). Poll this to see
+    live traffic, e.g. while the desktop app polls analysis progress.
+    """
+    now = _time.time()
+    buckets: dict[str, int] = {}
+    by_path: dict[str, int] = {}
+    last_min = 0
+    for ts, method, path in _hits:
+        if ts < now - _HIT_WINDOW_S:
+            continue
+        minute = _time.strftime("%H:%M", _time.localtime(ts))
+        buckets[minute] = buckets.get(minute, 0) + 1
+        if ts >= now - 60:
+            last_min += 1
+            key = f"{method} {path}"
+            by_path[key] = by_path.get(key, 0) + 1
+    return {
+        "uptime_s": round(now - _STARTED_AT, 1),
+        "last_minute_hits": last_min,
+        "window_min": 15,
+        "per_minute": buckets,
+        "last_minute_by_endpoint": dict(
+            sorted(by_path.items(), key=lambda kv: -kv[1])
+        ),
+    }
 
 
 def get_luna_llm(temperature: float = 0.7, max_tokens: int | None = None) -> ChatOpenAI:
@@ -114,6 +187,7 @@ def public_s3_url(key: str) -> str:
 
 
 def get_async_openai_client() -> AsyncOpenAI:
+    """Async client for analysis AI (Luna everywhere)."""
     if not LUNA_API_KEY:
         raise HTTPException(status_code=500, detail="LUNA_API_KEY is not configured")
     return AsyncOpenAI(api_key=LUNA_API_KEY, base_url=LUNA_BASE_URL)
@@ -169,6 +243,18 @@ def init_exam_db() -> None:
                 student_dataset_id INTEGER NULL,
                 student_label TEXT NOT NULL DEFAULT '',
                 created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+            );
+            CREATE TABLE IF NOT EXISTS student_marks (
+                id SERIAL PRIMARY KEY,
+                exam_id INTEGER NOT NULL REFERENCES final_exams(id) ON DELETE CASCADE,
+                student_dataset_id INTEGER NOT NULL,
+                row_index INTEGER NOT NULL,
+                student_name TEXT NOT NULL DEFAULT '',
+                marks_json JSONB NOT NULL DEFAULT '[]',
+                total_obtained DOUBLE PRECISION NOT NULL DEFAULT 0,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                UNIQUE (exam_id, student_dataset_id, row_index)
             );
             CREATE TABLE IF NOT EXISTS student_datasets (
                 id SERIAL PRIMARY KEY,
@@ -257,7 +343,7 @@ def pdf_bytes_to_page_pngs(pdf_bytes: bytes, dpi: int = PDF_RENDER_DPI) -> list[
 
 
 async def analyze_syllabus_image_url(image_url: str, subject: str) -> str:
-    """Send one syllabus page image URL to the Luna chat-completion model."""
+    """Send one syllabus page image URL to the vision chat-completion model."""
     subject_label = subject.strip() or "General"
     prompt = (
         f"You are an exam-preparation assistant for the subject '{subject_label}'. "
@@ -395,6 +481,8 @@ async def root():
         "docs": "/docs",
         "luna_model": LUNA_MODEL,
         "luna_base_url": LUNA_BASE_URL,
+        "vision_model": LUNA_MODEL,
+        "vision_base_url": LUNA_BASE_URL,
         "s3_bucket": S3_BUCKET,
         "aws_region": AWS_REGION,
     }
@@ -406,6 +494,8 @@ async def health():
         "status": "ok",
         "luna_model": LUNA_MODEL,
         "luna_configured": bool(LUNA_API_KEY),
+        "vision_model": LUNA_MODEL,
+        "vision_configured": bool(LUNA_API_KEY),
         "s3_bucket": S3_BUCKET,
         "aws_region": AWS_REGION,
     }
@@ -418,6 +508,9 @@ async def config():
         "luna_model": LUNA_MODEL,
         "luna_base_url": LUNA_BASE_URL,
         "luna_key_configured": bool(LUNA_API_KEY),
+        "vision_model": LUNA_MODEL,
+        "vision_base_url": LUNA_BASE_URL,
+        "vision_key_configured": bool(LUNA_API_KEY),
         "s3_bucket": S3_BUCKET,
         "aws_region": AWS_REGION,
     }
@@ -870,7 +963,7 @@ async def analyze_question_paper(
     subject: str = Form(default=""),
     file: UploadFile = File(...),
 ):
-    """Full pipeline: question-paper pdf -> page PNGs -> S3 -> structured AI extraction.
+    """Full pipeline: question-paper pdf -> page PNGs -> S3 -> structured AI extraction (vision model).
 
     Pages are analysed sequentially with previous pages as context so questions
     split across pages stay intact; a final merge pass consolidates everything.
@@ -1071,6 +1164,468 @@ async def get_final_exam(exam_id: int):
         "student_label": r["student_label"] or "",
         "created_at": str(r["created_at"]),
     }
+
+
+class AnswerSheetAnalysisResponse(BaseModel):
+    model: str
+    matched_question: str = ""
+    max_marks: float = 0
+    awarded_marks: float = 0
+    expected_answer: str = ""
+    strengths: str = ""
+    improvements: str = ""
+
+
+def _downscale_image(data: bytes, content_type: str, max_side: int = 1600) -> tuple[bytes, str]:
+    """Downscale large answer-sheet photos so vision payloads stay small."""
+    try:
+        from PIL import Image
+    except ImportError:
+        return data, content_type
+    try:
+        img = Image.open(BytesIO(data)).convert("RGB")
+        if max(img.size) > max_side:
+            img.thumbnail((max_side, max_side))
+        buf = BytesIO()
+        img.save(buf, format="JPEG", quality=85)
+        return buf.getvalue(), "image/jpeg"
+    except Exception:
+        return data, content_type
+
+
+@app.post("/exam/analyze-answer-sheet", response_model=AnswerSheetAnalysisResponse)
+async def analyze_answer_sheet(
+    subject: str = Form(default=""),
+    questions: str = Form(...),
+    file: UploadFile = File(...),
+):
+    """Check one answer-sheet photo against the question paper.
+
+    `questions` is a JSON array of {q_no, text, marks, sub_questions}.
+    The model matches the handwriting to one question and returns
+    max/awarded marks plus qualitative feedback as JSON.
+    """
+    import base64 as _b64
+    import json as _json
+
+    ctype = (file.content_type or "").lower()
+    if not ctype.startswith("image/"):
+        raise HTTPException(status_code=415, detail=f"not an image: {file.content_type}")
+    raw = await file.read()
+    if not raw:
+        raise HTTPException(status_code=422, detail="empty image")
+    if len(raw) > MAX_IMAGE_BYTES:
+        raise HTTPException(status_code=413, detail="image larger than 10 MB")
+
+    try:
+        questions_obj = _json.loads(questions or "[]")
+    except Exception:
+        raise HTTPException(status_code=422, detail="questions must be valid JSON")
+    if not isinstance(questions_obj, list) or not questions_obj:
+        raise HTTPException(status_code=422, detail="questions must be a non-empty JSON array")
+
+    small, small_type = _downscale_image(raw, ctype)
+    data_uri = f"data:{small_type};base64,{_b64.b64encode(small).decode('ascii')}"
+
+    subject_label = (subject or "").strip() or "General"
+    prompt = (
+        f"You are checking a student's handwritten answer-sheet photo for '{subject_label}'. "
+        "Below is the question paper as JSON (each entry has q_no, text, marks "
+        "and nested sub_questions).\n"
+        f"{_json.dumps(questions_obj)}\n"
+        "Task:\n"
+        "- Match the handwritten answer in the photo to the ONE question it answers "
+        "(use its q_no, e.g. \"1\" or \"2a\" for a sub-question).\n"
+        "- max_marks = the marks that question carries per the paper (number only).\n"
+        "- awarded_marks = how many marks the answer deserves (number only, 0 to max_marks).\n"
+        "- expected_answer = what a full-marks answer should contain (2-5 sentences).\n"
+        "- strengths = what is good in this student's answer (2-4 short phrases).\n"
+        "- improvements = what is missing or wrong and would gain marks.\n"
+        "Return ONLY this JSON, no prose:\n"
+        '{"matched_question": "1", "max_marks": 5, "awarded_marks": 3.5, '
+        '"expected_answer": "...", "strengths": "...", "improvements": "..."}'
+    )
+    client = get_async_openai_client()
+    try:
+        completion = await client.chat.completions.create(
+            model=LUNA_MODEL,
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": prompt},
+                        {"type": "image_url", "image_url": {"url": data_uri}},
+                    ],
+                }
+            ],
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"ai analysis failed: {exc}")
+    try:
+        reply = (completion.choices[0].message.content or "").strip()
+    except (IndexError, AttributeError):
+        reply = ""
+    if not reply:
+        raise HTTPException(status_code=502, detail="ai returned an empty analysis")
+    obj = _extract_json_object(reply)
+
+    def _to_float(v) -> float:
+        try:
+            return float(v)
+        except (ValueError, TypeError):
+            return 0
+
+    max_marks = _to_float(obj.get("max_marks"))
+    awarded = _to_float(obj.get("awarded_marks"))
+    if max_marks and awarded > max_marks:
+        awarded = max_marks
+    if awarded < 0:
+        awarded = 0
+    return AnswerSheetAnalysisResponse(
+        model=LUNA_MODEL,
+        matched_question=str(obj.get("matched_question", "") or ""),
+        max_marks=max_marks,
+        awarded_marks=awarded,
+        expected_answer=str(obj.get("expected_answer", "") or ""),
+        strengths=str(obj.get("strengths", "") or ""),
+        improvements=str(obj.get("improvements", "") or ""),
+    )
+
+
+class AnswerSheetChatResponse(BaseModel):
+    model: str
+    # "grading" = marks card for an attached answer page; "chat" = conversational.
+    kind: Literal["grading", "chat"] = "chat"
+    reply: str = ""
+    matched_question: str = ""
+    max_marks: float = 0
+    awarded_marks: float = 0
+    expected_answer: str = ""
+    strengths: str = ""
+    improvements: str = ""
+    suggestions: list[str] = Field(default_factory=list)
+
+
+@app.post("/exam/answer-sheet/chat", response_model=AnswerSheetChatResponse)
+async def answer_sheet_chat(
+    subject: str = Form(default=""),
+    questions: str = Form(...),
+    messages: str = Form(default="[]"),
+    target_question: str = Form(default=""),
+    images: list[UploadFile] = File(default=[]),
+):
+    """Chat endpoint for answer-sheet grading and follow-up discussion.
+
+    `questions` is the full question paper JSON (context for every turn);
+    `messages` is the prior thread as [{role, content}]; `target_question`
+    optionally pins the q_no the attached pages answer; `images` are the
+    attached answer-sheet page photos (0..n).
+
+    The model always returns JSON: {"kind": "grading", ...} when it grades
+    an answer (marks clamped to the question's max) or {"kind": "chat",
+    "reply", "suggestions"} when conversing about the marks it gave.
+    """
+    import base64 as _b64
+    import json as _json
+
+    try:
+        questions_obj = _json.loads(questions or "[]")
+    except Exception:
+        raise HTTPException(status_code=422, detail="questions must be valid JSON")
+    if not isinstance(questions_obj, list) or not questions_obj:
+        raise HTTPException(status_code=422, detail="questions must be a non-empty JSON array")
+
+    try:
+        history_raw = _json.loads(messages or "[]")
+    except Exception:
+        raise HTTPException(status_code=422, detail="messages must be valid JSON")
+    if not isinstance(history_raw, list):
+        raise HTTPException(status_code=422, detail="messages must be a JSON array")
+    history: list[dict] = []
+    for m in history_raw:
+        if (
+            isinstance(m, dict)
+            and m.get("role") in ("user", "assistant")
+            and isinstance(m.get("content"), str)
+            and m["content"].strip()
+        ):
+            history.append({"role": m["role"], "content": m["content"].strip()[:4000]})
+
+    # Downscale + inline every attached page as a data URI for the vision call.
+    image_uris: list[str] = []
+    for f in images:
+        ctype = (f.content_type or "").lower()
+        if not ctype.startswith("image/"):
+            raise HTTPException(status_code=415, detail=f"not an image: {f.content_type}")
+        raw = await f.read()
+        if not raw:
+            raise HTTPException(status_code=422, detail="empty image")
+        if len(raw) > MAX_IMAGE_BYTES:
+            raise HTTPException(status_code=413, detail="image larger than 10 MB")
+        small, small_type = _downscale_image(raw, ctype)
+        image_uris.append(f"data:{small_type};base64,{_b64.b64encode(small).decode('ascii')}")
+
+    subject_label = (subject or "").strip() or "General"
+    system = (
+        f"You are the AI grading assistant for the exam '{subject_label}'. The teacher "
+        "sends you photos of a student's handwritten answer-sheet pages and discusses "
+        "the marks with you. Below is the question paper as JSON (each entry has q_no, "
+        "text, marks and nested sub_questions).\n"
+        f"{_json.dumps(questions_obj)}\n\n"
+        "Rules:\n"
+        "- ALWAYS reply with a single JSON object, no prose around it.\n"
+        "- When the user's turn contains answer-sheet page photos to grade, reply with: "
+        '{"kind": "grading", "matched_question": "<q_no>", "max_marks": <number>, '
+        '"awarded_marks": <number>, "expected_answer": "...", "strengths": "...", '
+        '"improvements": "...", "reply": "<one-sentence summary of the marks>", '
+        '"suggestions": []}. max_marks must be the marks that question carries per '
+        "the paper; awarded_marks must be between 0 and max_marks.\n"
+        "- If a specific target question is given below, grade ONLY that question.\n"
+        "- If the pages clearly answer a different question, use that one instead.\n"
+        "- A turn with NO photos is a discussion turn, not a grading request: answer "
+        "from the thread. Assistant messages may carry markers like '[You graded this "
+        "answer: question X, awarded N of M marks.]' — use those marks and question "
+        "numbers when explaining. NEVER ask the user to re-upload pages when a grading "
+        "marker is already in the thread. Reply with: {\"kind\": \"chat\", "
+        '"reply": "...", "suggestions": ["<short follow-up>", "..."]}.\n'
+        "- Only ask for the photos if the thread contains no grading marker at all.\n"
+        "- Never invent questions that are not in the paper JSON.\n"
+        "- expected_answer = what a full-marks answer should contain (2-5 sentences); "
+        "strengths = what is good in this answer; improvements = what is missing or "
+        "wrong and would gain marks."
+    )
+    if (target_question or "").strip():
+        system += (
+            f"\n\nTARGET QUESTION: the user has pinned q_no '{target_question.strip()}' — "
+            "grade ONLY that question from the attached pages."
+        )
+
+    user_text = "Please grade the attached answer-sheet page(s)."
+    if (target_question or "").strip():
+        user_text = f"Grade the attached answer-sheet page(s) for question '{target_question.strip()}'."
+
+    if not image_uris:
+        user_text = (
+            "(No photos in this message — this is a discussion turn. Use the grading "
+            "markers and marks from the thread; do NOT ask for photos again.)"
+        )
+    content: list[dict] = [{"type": "text", "text": user_text}]
+    for uri in image_uris:
+        content.append({"type": "image_url", "image_url": {"url": uri}})
+
+    chat_messages: list[dict] = [{"role": "system", "content": system}]
+    # Keep the thread focused: recent history only (system carries the paper).
+    for m in history[-12:]:
+        chat_messages.append({"role": m["role"], "content": m["content"]})
+    if not image_uris and any(
+        "[You graded this answer" in m["content"] for m in history[-12:]
+    ):
+        # Reinforce the discussion framing right before the question — some
+        # models still ask for photos otherwise.
+        chat_messages.append(
+            {
+                "role": "assistant",
+                "content": (
+                    "Understood — no photos needed for this turn; I will answer from "
+                    "the grades already in this thread."
+                ),
+            }
+        )
+    chat_messages.append({"role": "user", "content": content})
+
+    client = get_async_openai_client()
+    try:
+        completion = await client.chat.completions.create(
+            model=LUNA_MODEL,
+            messages=chat_messages,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"ai chat failed: {exc}")
+    try:
+        reply = (completion.choices[0].message.content or "").strip()
+    except (IndexError, AttributeError):
+        reply = ""
+    if not reply:
+        raise HTTPException(status_code=502, detail="ai returned an empty reply")
+
+    try:
+        obj = _extract_json_object(reply)
+    except HTTPException:
+        # Model ignored the JSON instruction — degrade to a plain chat reply
+        # rather than failing the whole turn.
+        obj = {"kind": "chat", "reply": reply}
+
+    kind = obj.get("kind") if obj.get("kind") in ("grading", "chat") else "chat"
+
+    # Deterministic guard: on a no-photo discussion turn, some models ignore
+    # the thread and ask for photos anyway. Rewrite the reply from the
+    # grading markers in the thread so the conversation stays useful.
+    _ask_for_photos = (
+        not image_uris
+        and kind == "chat"
+        and ("upload" in reply.lower() or "attach" in reply.lower() or "photo" in reply.lower())
+    )
+    if _ask_for_photos:
+        import re as _re
+
+        grades = _re.findall(
+            r"\[You graded this answer: question ([^,]+), awarded ([\d.]+) of ([\d.]+) marks\.\]",
+            " ".join(m["content"] for m in history if m["role"] == "assistant"),
+        )
+        if grades:
+            q, got, out_of = grades[-1]
+            obj = {
+                "kind": "chat",
+                "reply": (
+                    f"Earlier I graded question {q}: {got} out of {out_of} marks. "
+                    "Ask me anything about that grading — for example why marks "
+                    "were deducted or how the answer could reach full marks."
+                ),
+                "suggestions": [
+                    f"Why not the full {out_of} marks?",
+                    f"How could the answer earn all {out_of} marks?",
+                ],
+            }
+            kind = "chat"
+
+    def _to_float(v) -> float:
+        try:
+            return float(v)
+        except (ValueError, TypeError):
+            return 0
+
+    max_marks = _to_float(obj.get("max_marks"))
+    awarded = _to_float(obj.get("awarded_marks"))
+    if max_marks and awarded > max_marks:
+        awarded = max_marks
+    if awarded < 0:
+        awarded = 0
+
+    def _str(v) -> str:
+        return str(v) if v is not None else ""
+
+    suggestions_raw = obj.get("suggestions")
+    suggestions = (
+        [str(s) for s in suggestions_raw if isinstance(s, (str, int, float))][:4]
+        if isinstance(suggestions_raw, list)
+        else []
+    )
+    return AnswerSheetChatResponse(
+        model=LUNA_MODEL,
+        kind=kind,
+        reply=_str(obj.get("reply")) or (
+            f"Graded as Q{_str(obj.get('matched_question'))}: {awarded}/{max_marks}."
+            if kind == "grading"
+            else ""
+        ),
+        matched_question=_str(obj.get("matched_question")),
+        max_marks=max_marks,
+        awarded_marks=awarded,
+        expected_answer=_str(obj.get("expected_answer")),
+        strengths=_str(obj.get("strengths")),
+        improvements=_str(obj.get("improvements")),
+        suggestions=suggestions,
+    )
+
+
+class QuestionMarkItem(BaseModel):
+    q_no: str = ""
+    max_marks: float = 0
+    obtained: float = 0
+
+
+class StudentMarksUpsert(BaseModel):
+    exam_id: int
+    student_dataset_id: int
+    row_index: int
+    student_name: str = ""
+    marks: list[QuestionMarkItem] = Field(default_factory=list)
+    total_obtained: float = 0
+
+
+@app.put("/exam/marks")
+async def upsert_student_marks(body: StudentMarksUpsert):
+    """Save teacher-entered per-question marks for one student (upsert).
+
+    Per-item obtained values are clamped to [0, max_marks] and the total
+    is recomputed server-side so the stored total always matches the items.
+    """
+    import json as _json
+
+    items = []
+    total = 0.0
+    for m in body.marks:
+        try:
+            mx = float(m.max_marks or 0)
+        except (ValueError, TypeError):
+            mx = 0
+        try:
+            ob = float(m.obtained or 0)
+        except (ValueError, TypeError):
+            ob = 0
+        if ob < 0:
+            ob = 0
+        if mx > 0 and ob > mx:
+            ob = mx
+        items.append({"q_no": m.q_no or "", "max_marks": mx, "obtained": ob})
+        total += ob
+    try:
+        with psycopg.connect(EXAM_DATABASE_URL, row_factory=dict_row) as conn:
+            row = conn.execute(
+                "INSERT INTO student_marks"
+                " (exam_id, student_dataset_id, row_index, student_name,"
+                "  marks_json, total_obtained, updated_at)"
+                " VALUES (%s,%s,%s,%s,%s::jsonb,%s, now())"
+                " ON CONFLICT (exam_id, student_dataset_id, row_index)"
+                " DO UPDATE SET student_name = EXCLUDED.student_name,"
+                "  marks_json = EXCLUDED.marks_json,"
+                "  total_obtained = EXCLUDED.total_obtained,"
+                "  updated_at = now()"
+                " RETURNING exam_id, student_dataset_id, row_index,"
+                "  student_name, marks_json AS marks, total_obtained,"
+                "  updated_at",
+                (
+                    body.exam_id,
+                    body.student_dataset_id,
+                    body.row_index,
+                    body.student_name.strip(),
+                    _json.dumps(items),
+                    total,
+                ),
+            ).fetchone()
+    except psycopg.OperationalError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=f"examdb unreachable: {str(exc).strip().splitlines()[0][:200]}",
+        )
+    d = dict(row)
+    d["updated_at"] = str(d.get("updated_at"))
+    return d
+
+
+@app.get("/exam/marks")
+async def list_exam_marks(exam_id: int, student_dataset_id: int):
+    """All saved teacher marks for one exam + student dataset."""
+    try:
+        with psycopg.connect(EXAM_DATABASE_URL, row_factory=dict_row) as conn:
+            rows = conn.execute(
+                "SELECT exam_id, student_dataset_id, row_index, student_name,"
+                " marks_json AS marks, total_obtained, updated_at"
+                " FROM student_marks WHERE exam_id = %s AND student_dataset_id = %s"
+                " ORDER BY row_index",
+                (exam_id, student_dataset_id),
+            ).fetchall()
+    except psycopg.OperationalError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=f"examdb unreachable: {str(exc).strip().splitlines()[0][:200]}",
+        )
+    out = []
+    for r in rows:
+        d = dict(r)
+        d["updated_at"] = str(d.get("updated_at"))
+        out.append(d)
+    return {"marks": out}
 
 
 class StudentUploadResponse(BaseModel):
