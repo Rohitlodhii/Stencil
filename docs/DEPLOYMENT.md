@@ -26,8 +26,31 @@ Create or update the Blueprint from the repository-root `render.yaml`. Render mu
 | Service | Dockerfile | Build context | Health check |
 | --- | --- | --- | --- |
 | `stencil-web` | `apps/gateway/Dockerfile` | repository root | `/health` |
-| `stencil-api` | `apps/api/Dockerfile` | repository root | `/health` |
+| `stencil-api` | `Dockerfile` | repository root | `/health` |
 | `stencil-auth` | `apps/auth-service/Dockerfile` | repository root | `/health` |
+
+The root `Dockerfile` is the canonical API image. It deliberately copies the root
+`pyproject.toml` and `uv.lock`, all three Python workspace manifests, and the API,
+auth, and gateway source trees from one repository-root context. A context transfer
+of only a few hundred bytes means Render is still applying a service Root Directory
+such as `apps/api`; that dashboard setting overrides the paths expected here.
+
+### Render dashboard settings
+
+For the `stencil-api` service, use these exact values:
+
+- Root Directory: blank (repository root)
+- Runtime: Docker
+- Dockerfile Path: `Dockerfile`
+- Docker Build Context: `.`
+- Docker Command / Start Command: blank; use the image `CMD`
+- Health Check Path: `/health`
+
+For `stencil-web` and `stencil-auth`, Root Directory and Docker Build Context must
+also remain at the repository root. Their Dockerfile paths are
+`apps/gateway/Dockerfile` and `apps/auth-service/Dockerfile`, respectively. If a
+service was created manually before the Blueprint, update or recreate it because
+`render.yaml` cannot override stale dashboard settings on an unrelated service.
 
 The Blueprint creates `stencil-db` and injects its private connection string into the API and auth service. Both services currently run idempotent `CREATE TABLE IF NOT EXISTS` startup migrations; the repository does not use Alembic. Schema changes beyond the MVP should introduce versioned migrations before production data is stored.
 
@@ -52,6 +75,13 @@ corepack pnpm --filter desktop build
 docker build -f apps/api/Dockerfile -t stencil-api .
 docker build -f apps/auth-service/Dockerfile -t stencil-auth .
 docker build -f apps/gateway/Dockerfile -t stencil-web .
+docker run --rm -e PORT=10000 -e STENCIL_DEMO_MODE=true -p 10000:10000 stencil-api
+```
+
+The canonical clean API build is:
+
+```powershell
+docker build --no-cache -f Dockerfile -t stencil-api .
 docker run --rm -e PORT=10000 -e STENCIL_DEMO_MODE=true -p 10000:10000 stencil-api
 ```
 

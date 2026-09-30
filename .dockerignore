@@ -13,3 +13,5 @@
 .env
 .env.*
 !.env.example
+
+# Keep pyproject.toml, uv.lock, and apps/ available to root-context builds.

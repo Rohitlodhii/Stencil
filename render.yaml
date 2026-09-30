@@ -22,7 +22,7 @@ services:
     name: stencil-api
     runtime: docker
     plan: free
-    dockerfilePath: ./apps/api/Dockerfile
+    dockerfilePath: ./Dockerfile
     dockerContext: .
     healthCheckPath: /health
     envVars:
