@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { AnimatePresence, motion } from "motion/react";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, KeyRound } from "lucide-react";
 import { AuthLayout } from "@/components/AuthLayout";
 import { Button } from "@/components/ui/button";
 import { coordinatorLogin, fetchSeededCoordinators } from "@/lib/auth";
+import { fetchStencilStatus } from "@/lib/exam";
 
 const inputCls =
   "w-full";
@@ -16,9 +17,13 @@ export function CoordinatorLoginPage({ onLogin }: { onLogin: () => void }) {
   const [ids, setIds] = useState<{ coordinator_id: string; college: string }[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [demoMode, setDemoMode] = useState(false);
 
   useEffect(() => {
     fetchSeededCoordinators().then(setIds).catch(() => {});
+    fetchStencilStatus()
+      .then((status) => setDemoMode(status.demo_mode))
+      .catch(() => setDemoMode(false));
   }, []);
 
   // Backspace goes back (ignored while typing in a field).
@@ -66,6 +71,31 @@ export function CoordinatorLoginPage({ onLogin }: { onLogin: () => void }) {
       description="Coordinators are pre-seeded per college — there is no coordinator registration."
     >
       <form onSubmit={submit} className="flex flex-col gap-4">
+        {demoMode && (
+          <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-amber-950">
+            <div className="flex items-start gap-2">
+              <KeyRound className="mt-0.5 size-4 shrink-0" />
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold">Demo access</p>
+                <p className="mt-1 text-xs leading-5">
+                  Coordinator ID: <code className="font-semibold">coord_rgpv</code><br />
+                  Password: <code className="font-semibold">coord123</code>
+                </p>
+                <button
+                  type="button"
+                  className="mt-2 text-xs font-semibold underline underline-offset-2"
+                  onClick={() => {
+                    setCoordinatorId("coord_rgpv");
+                    setPassword("coord123");
+                    setError(null);
+                  }}
+                >
+                  Use demo credentials
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
         <label className="flex flex-col gap-1.5">
           <span className="text-sm font-medium">Coordinator ID</span>
           <input
