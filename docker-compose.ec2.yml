@@ -1,19 +1,19 @@
 # EC2 single-host stack — mponline backends + local Postgres.
-# Host: i-0aa723c7bb18f7bd0 | public 3.109.3.187 | private 172.31.8.45 | ap-south-1
+# Host: i-066a36a5dfb5cf481 | public 13.203.224.137 | private 172.31.2.115 | ap-south-1
 #
 # Inter-service wiring (inside docker network, via service DNS):
 #   gateway  -> http://auth:8002 , http://exam-api:8001 , http://scanner:8000
 # Externally (frontends / desktop / web point here — apps/web + apps/desktop NOT deployed):
-#   scanner  http://3.109.3.187:8000
-#   exam-api http://3.109.3.187:8001
-#   auth     http://3.109.3.187:8002
-#   gateway  http://3.109.3.187:8090   <-- desktop/web should use this single entrypoint
+#   scanner  http://13.203.224.137:8000
+#   exam-api http://13.203.224.137:8001
+#   auth     http://13.203.224.137:8002
+#   gateway  http://13.203.224.137:8090   <-- desktop/web should use this single entrypoint
 #
 # Postgres runs local on this EC2 (pgdata volume). NOT published publicly;
 # bound to 127.0.0.1:5432 for EC2-local debugging only. Services reach it as
 # postgres:5432 inside the compose network.
 #
-# Deploy:  pwsh scripts/deploy-ec2.ps1   (uses AWS CLI + SSH key sih139-backend-key)
+# Deploy:  pwsh scripts/deploy-ec2.ps1   (uses AWS CLI + SSH key mponline-fresh-key)
 
 name: mponline-ec2
 
@@ -55,8 +55,12 @@ services:
       LUNA_MODEL: ${LUNA_MODEL:-free/gpt-6-luna}
       S3_BUCKET: ${S3_BUCKET:-mponline-images-398218088339}
       AWS_REGION: ${AWS_REGION:-ap-south-1}
-      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
-      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      # S3 creds come from the EC2 instance profile (IAM role
+      # mponline-ec2-s3, IMDSv2 hop-limit 2) — botocore picks them up
+      # via instance metadata. Do NOT set AWS_ACCESS_KEY_ID /
+      # AWS_SECRET_ACCESS_KEY here (empty strings shadow the instance
+      # role in the credential chain). Static keys fallback only:
+      # AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
     ports:
       - "8001:8001"
 
@@ -100,7 +104,7 @@ services:
       - scanner
     environment:
       # In-host service DNS (reliable). Public-IP equivalents for reference:
-      #   http://3.109.3.187:8002 / :8001 / :8000
+      #   http://13.203.224.137:8002 / :8001 / :8000
       AUTH_SERVICE_URL: http://auth:8002
       EXAM_API_URL: http://exam-api:8001
       SCANNER_URL: http://scanner:8000

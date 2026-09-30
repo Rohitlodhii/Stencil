@@ -5,8 +5,8 @@
    Prereqs: AWS CLI configured (region ap-south-1), OpenSSH client.
 
    What it does:
-    1. Resolves i-0aa723c7bb18f7bd0 public/private IP via AWS CLI.
-    2. Opens SG ports 8002 (auth) + 8090 (gateway) if missing.
+    1. Resolves i-066a36a5dfb5cf481 public/private IP via AWS CLI.
+    2. Opens SG ports 8000/8001/8002 (services) + 8090 (gateway) if missing.
     3. Installs Docker + compose plugin on the EC2 (Ubuntu/Amazon Linux).
     4. Syncs code + compose + .env.ec2 to ~/mponline on the EC2.
     5. Builds + starts the stack, prints container status + health checks.
@@ -14,9 +14,9 @@
    are repointed to the EC2 public IP separately (see -UpdateFrontends).
 #>
 param(
-  [string]$KeyPath = "$HOME/.ssh/sih139-backend-key.pem",
+  [string]$KeyPath = "$HOME/.ssh/mponline-fresh.pem",
   [string]$EnvFile = "deploy/.env.ec2",
-  [string]$InstanceId = "i-0aa723c7bb18f7bd0",
+  [string]$InstanceId = "i-066a36a5dfb5cf481",
   [switch]$UpdateFrontends
 )
 
@@ -51,7 +51,7 @@ $openPorts = @()
 foreach ($p in $sg.SecurityGroups[0].IpPermissions) {
   if ($p.FromPort) { for ($i = $p.FromPort; $i -le $p.ToPort; $i++) { $openPorts += $i } }
 }
-foreach ($port in @(8002, 8090)) {
+foreach ($port in @(8000, 8001, 8002, 8090)) {
   if ($openPorts -contains $port) { Info "SG $SgId already allows :$port"; continue }
   Info "Authorizing SG $SgId :$port from 0.0.0.0/0 ..."
   aws ec2 authorize-security-group-ingress --group-id $SgId --protocol tcp --port $port --cidr 0.0.0.0/0 | Out-Null
@@ -110,7 +110,7 @@ Ssh "cd ~/mponline && set -a; . ./.env.ec2; set +a; sudo -E docker compose up -d
 Ssh "cd ~/mponline && sudo docker compose ps; sudo docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'"
 Ok "Stack started. Waiting 15s for app boot, then health checks..."
 Start-Sleep -Seconds 15
-Ssh "for p in '8000:scanner /health' '8001:exam /health' '8002:auth /health' '8090:gateway /health'; do port=`$${p%%:*}; path=`$${p##* }; echo \"== :`$port`$path ==\"; curl -sm 8 http://localhost:`$port`$path || echo FAILED; done; echo '== gateway aggregated =='; curl -sm 10 http://localhost:8090/health || echo FAILED"
+Ssh 'curl -sm 8 http://localhost:8000/health; echo; curl -sm 8 http://localhost:8001/health; echo; curl -sm 8 http://localhost:8002/health; echo; curl -sm 10 http://localhost:8090/health'
 
 # --- 6. optionally repoint frontends ---
 if ($UpdateFrontends) {

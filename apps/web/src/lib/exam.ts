@@ -1,7 +1,13 @@
-/** Typed client for the exam/syllabus backend (FastAPI on :8001). */
+/** Typed client for the exam/syllabus backend (FastAPI on :8001).
+ *
+ * Same-origin by default: requests go to /api/backend/*, which Next.js
+ * rewrites (server-side) to the EC2 gateway — so an HTTPS page never
+ * fetches http:// directly and the browser has nothing to block.
+ * Override with NEXT_PUBLIC_API_URL for direct access (local dev, Tauri).
+ */
 
 export const API_URL =
-  process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8001";
+  process.env.NEXT_PUBLIC_API_URL ?? "/api/backend";
 
 export type SummaryPageImage = {
   page: number;

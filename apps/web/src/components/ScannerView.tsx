@@ -11,8 +11,16 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 
-/** Sheet-scanner backend (OpenCV FastAPI). Same default as the desktop app. */
-const SCANNER_URL = process.env.NEXT_PUBLIC_SCANNER_URL ?? "http://localhost:8000";
+/** Sheet-scanner backend (OpenCV FastAPI), reached via the gateway.
+ *
+ * Same-origin by default: /api/backend/scanner/* is rewritten server-side
+ * to the EC2 gateway, which strips the /scanner prefix — so the MJPEG
+ * <img> and status polls never hit http:// directly and the browser
+ * has no mixed content to block. Override with NEXT_PUBLIC_SCANNER_URL
+ * for direct access (local dev, Tauri).
+ */
+const SCANNER_URL =
+  process.env.NEXT_PUBLIC_SCANNER_URL ?? "/api/backend/scanner";
 
 type ScannerStatus = {
   sheet_detected: boolean;

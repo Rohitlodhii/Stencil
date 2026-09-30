@@ -1,5 +1,10 @@
 /** Auth client — talks to the gateway (which routes /auth/* to auth-service).
  *
+ * Same-origin by default: requests go to /api/backend/*, which Next.js
+ * rewrites (server-side) to the EC2 gateway — so an HTTPS page never
+ * fetches http:// directly and the browser has nothing to block.
+ * Override with NEXT_PUBLIC_AUTH_URL for direct access (local dev, Tauri).
+ *
  * localStorage:
  *  - mponline_session : logged-in user + JWT (checked on app start)
  *  - mponline_banned  : lowercased teacher emails declined by a coordinator.
@@ -9,7 +14,7 @@
 export const AUTH_URL =
   process.env.NEXT_PUBLIC_AUTH_URL ??
   process.env.NEXT_PUBLIC_GATEWAY_URL ??
-  "http://localhost:8090";
+  "/api/backend";
 
 export type Role = "coordinator" | "teacher";
 
