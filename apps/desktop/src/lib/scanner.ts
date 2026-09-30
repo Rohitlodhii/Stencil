@@ -1,7 +1,15 @@
 /** Typed client for the OpenCV sheet-scanner backend (FastAPI). */
 
+function defaultScannerUrl() {
+  if (typeof window === "undefined") return "http://localhost:8000";
+  const localHosts = new Set(["localhost", "127.0.0.1", "::1"]);
+  return localHosts.has(window.location.hostname)
+    ? `${window.location.protocol}//${window.location.hostname}:8000`
+    : `${window.location.origin}/scanner`;
+}
+
 export const SCANNER_URL =
-  import.meta.env.VITE_SCANNER_URL ?? "http://localhost:8000";
+  import.meta.env.VITE_SCANNER_URL ?? defaultScannerUrl();
 
 export type ScannerStatus = {
   sheet_detected: boolean;
