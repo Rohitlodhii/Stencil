@@ -12,6 +12,8 @@ out
 
 # Build output
 dist
+build/
+*.spec
 
 # Python
 .venv

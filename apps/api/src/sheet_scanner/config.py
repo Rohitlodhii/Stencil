@@ -7,6 +7,7 @@ for different desks/lighting without digging through the CV logic.
 from __future__ import annotations
 
 import argparse
+import os
 from dataclasses import dataclass
 
 
@@ -19,6 +20,7 @@ class ScannerConfig:
     """Runtime configuration for the sheet scanner."""
 
     camera_index: int = 0
+    camera_enabled: bool = True
     output_dir: str = "output"
 
     # -- Detection pipeline --
@@ -44,6 +46,14 @@ class ScannerConfig:
     # -- HTTP server --
     host: str = "127.0.0.1"
     port: int = 8000
+    allowed_origins: tuple[str, ...] = (
+        "http://localhost:1420",
+        "http://127.0.0.1:1420",
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "tauri://localhost",
+        "https://tauri.localhost",
+    )
 
 
 def _parse_aspect_ratio(value: str) -> float:
@@ -68,6 +78,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--camera", type=int, default=0, dest="camera_index",
                         help="webcam device index (default: 0)")
+    parser.add_argument("--no-camera", action="store_false", dest="camera_enabled",
+                        help="start without opening camera hardware (diagnostics only)")
     parser.add_argument("--output-dir", default="output",
                         help="directory for saved scans (default: output)")
     parser.add_argument("--min-area", type=float, default=25_000.0,
@@ -102,8 +114,14 @@ def build_parser() -> argparse.ArgumentParser:
 def parse_args(argv: list[str] | None = None) -> ScannerConfig:
     """Parse CLI args into a ScannerConfig."""
     args = build_parser().parse_args(argv)
+    configured_origins = tuple(
+        origin.strip()
+        for origin in os.getenv("STENCIL_SCANNER_ORIGINS", "").split(",")
+        if origin.strip()
+    )
     return ScannerConfig(
         camera_index=args.camera_index,
+        camera_enabled=args.camera_enabled,
         output_dir=args.output_dir,
         blur_kernel=ScannerConfig.blur_kernel,
         canny_low=args.canny_low,
@@ -119,4 +137,5 @@ def parse_args(argv: list[str] | None = None) -> ScannerConfig:
         cooldown_seconds=args.cooldown_seconds,
         host=args.host,
         port=args.port,
+        allowed_origins=configured_origins or ScannerConfig.allowed_origins,
     )
