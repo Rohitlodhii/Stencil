@@ -1,30 +1,15 @@
 "use client";
 
 import { Link, useNavigate } from "react-router-dom";
-import { Pause, Play } from "lucide-react";
-import { useRef, useState } from "react";
 import { GradientBackground } from "@/components/ui/gradient-backgrounds";
 import { EvaluationSpeedSection } from "@/components/landing/EvaluationSpeedSection";
 import { HowItWorksSection } from "@/components/landing/HowItWorksSection";
+import { WhyThisExist } from "@/components/landing/WhyThisExist";
+import { VideoPlayer } from "@/components/landing/VideoPlayer";
 
 /** Public landing route (/). */
 export function LandingPage() {
   const navigate = useNavigate();
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const [isPlaying, setIsPlaying] = useState(true);
-
-  const toggleVideo = async () => {
-    const video = videoRef.current;
-    if (!video) return;
-
-    if (video.paused) {
-      await video.play();
-      setIsPlaying(true);
-    } else {
-      video.pause();
-      setIsPlaying(false);
-    }
-  };
 
   return (
     <main className="font-inter min-h-screen bg-white px-0 pt-0 md:px-32 md:pt-4">
@@ -95,32 +80,15 @@ export function LandingPage() {
             </button>
           </div>
 
-          <div className="relative mt-12 w-full max-w-7xl overflow-hidden rounded-2xl shadow-2xl shadow-orange-950/15">
-            <video
-              ref={videoRef}
-              autoPlay
-              loop
-              muted
-              playsInline
-              onPlay={() => setIsPlaying(true)}
-              onPause={() => setIsPlaying(false)}
-              className="h-auto w-full"
-            >
-              <source src="/hero.mp4" type="video/mp4" />
-            </video>
-            <button
-              type="button"
-              onClick={toggleVideo}
-              aria-label={isPlaying ? "Pause video" : "Play video"}
-              className="absolute bottom-4 left-4 flex h-9 w-9 items-center justify-center rounded-full bg-slate-950/80 text-white backdrop-blur transition-colors hover:bg-slate-950"
-            >
-              {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
-            </button>
-          </div>
+          <VideoPlayer
+            src="/hero.mp4"
+            className="mt-12 max-w-7xl rounded-2xl shadow-2xl shadow-orange-950/15"
+          />
         </section>
       </GradientBackground>
       <EvaluationSpeedSection />
       <HowItWorksSection />
+      <WhyThisExist />
     </main>
   );
 }

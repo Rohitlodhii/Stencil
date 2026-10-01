@@ -25,6 +25,17 @@
   font-display: swap;
 }
 
+/* True italic companion for "Inter Medium" — without this the browser
+   synthesises an oblique by slanting the upright, which looks noticeably
+   worse on the landing headline. */
+@font-face {
+  font-family: "Inter Medium";
+  src: url("/Inter%20%281%29/static/Inter_18pt-MediumItalic.ttf") format("truetype");
+  font-weight: 500;
+  font-style: italic;
+  font-display: swap;
+}
+
 @font-face {
   font-family: "Inter Variable";
   src: url("/Inter%20%281%29/Inter-VariableFont_opsz,wght.ttf") format("truetype");
